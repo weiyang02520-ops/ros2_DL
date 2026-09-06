@@ -1347,7 +1347,7 @@ class MobileRosBridge(Node):
             min(3000, duration_ms or self.default_cmd_duration_ms),
         )
         msg = Twist()
-        msg.linear.x = linear_x
+        msg.linear.x = -linear_x  # Match the verified ZLAC motor wiring direction.
         msg.angular.z = angular_z
         self._cmd_pub.publish(msg)
         if linear_x == 0.0 and angular_z == 0.0:

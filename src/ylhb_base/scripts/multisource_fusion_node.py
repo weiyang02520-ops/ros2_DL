@@ -541,7 +541,7 @@ def create_node(node_name: str) -> Any:
             array.header.stamp = stamp
             status = DiagnosticStatus()
             status.name = "DG Multi-source Fusion"
-            status.level = DiagnosticStatus.OK if output.fusion_mode in {"NOMINAL", "GNSS_AIDED", "LIDAR_AIDED"} else DiagnosticStatus.WARN
+            status.level = DiagnosticStatus.OK if output.fusion_mode in {"NOMINAL", "GNSS_AIDED", "LIDAR_AIDED", "UWB_AIDED"} else DiagnosticStatus.WARN
             status.message = output.fusion_mode
             fields = {
                 "fusion_mode": output.fusion_mode,

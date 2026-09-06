@@ -26,7 +26,7 @@ SIGNAL_STATE_KEYS = {
     "lidar": ("state", "temporal_status"),
     "scan_match": ("accepted", "reason"),
     "relocalization": ("state",),
-    "uwb": ("state",),
+    "uwb": ("current_state", "state", "decision"),
 }
 
 
@@ -145,6 +145,9 @@ def parse_signal_diagnostic(
             state = normalize_signal_state(upper_values.get("reason"), fresh)
     elif signal == "relocalization":
         state = normalize_signal_state(upper_values.get("state"), fresh)
+    elif signal == "uwb":
+        raw = upper_values.get("current_state") or upper_values.get("state") or upper_values.get("decision")
+        state = normalize_signal_state(raw, fresh)
     else:
         raise ValueError(f"unsupported diagnostic signal: {signal}")
     if level >= 2 and state == GOOD:

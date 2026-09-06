@@ -169,6 +169,18 @@ class NavigationHealthCoreTests(unittest.TestCase):
         )
         self.assertEqual(observation.state, REJECTED)
 
+    def test_uwb_diagnostic_mapping_uses_gate_state(self) -> None:
+        observation = parse_signal_diagnostic(
+            "uwb",
+            {"current_state": "RECOVERING", "decision": "HOLD_FOR_RECOVERY"},
+            1,
+            1.0,
+            0.5,
+            1.0,
+        )
+        self.assertEqual(observation.state, DEGRADED)
+        self.assertTrue(observation.fresh)
+
     def test_stale_relocalization_is_localization_suspect(self) -> None:
         output = NavigationHealthAggregator().evaluate(
             event(relocalization_state="RECOVERING", relocalization_fresh=False)

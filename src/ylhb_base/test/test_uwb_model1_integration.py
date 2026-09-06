@@ -19,6 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from uwb_data_model import UwbRangeObservation, SYNTHETIC_ANCHOR_COORDINATES
+from uwb_input import build_logical_observations, parse_kt1_ranges
 from uwb_2d_estimator import estimate_2d_position
 from uwb_quality_gate import UwbQualityGate, UwbQualityConfig
 from multisource_fusion_core import (
@@ -281,6 +282,31 @@ def test_uwb_05_logical6_physical3_dedup():
     return True
 
 
+def test_uwb_06_measured_protocol_and_missing_anchor_rejection():
+    """The measured KT1 protocol maps to six logical slots without inventing sources."""
+    ranges = parse_kt1_ranges(
+        "$KT1,NULL,NULL,1.81,1.11,1.84,NULL,NULL,NULL,LO=[no solution]"
+    )
+    assert ranges == (1.81, 1.11, 1.84)
+    observations = build_logical_observations(1.0, ranges, six_logical_slots=True)
+    assert len(observations) == 6
+    assert {item.physical_source_id for item in observations} == {0, 1, 2}
+    assert [item.physical_source_id for item in observations] == [0, 1, 2, 0, 1, 2]
+
+    missing = parse_kt1_ranges(
+        "$KT1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,LO=[no solution]"
+    )
+    gate = UwbQualityGate(UwbQualityConfig(), SYNTHETIC_ANCHOR_COORDINATES)
+    estimate, decision = gate.update(
+        build_logical_observations(2.0, missing, six_logical_slots=True), 2.0
+    )
+    assert estimate is None
+    assert decision == "REJECT"
+    assert gate.state.rejection_reason == "NO_VALID_OBSERVATIONS"
+
+    return True
+
+
 def run_all_tests():
     """Run all UWB integration tests."""
     print("\n" + "="*70)
@@ -293,6 +319,7 @@ def run_all_tests():
         ("UWB_03_STALE", test_uwb_03_stale),
         ("UWB_04_RECOVERY_HYSTERESIS", test_uwb_04_recovery_hysteresis),
         ("UWB_05_LOGICAL6_PHYSICAL3_DEDUP", test_uwb_05_logical6_physical3_dedup),
+        ("UWB_06_MEASURED_PROTOCOL", test_uwb_06_measured_protocol_and_missing_anchor_rejection),
     ]
 
     results = {}

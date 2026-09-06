@@ -112,6 +112,7 @@ install(PROGRAMS
   scripts/cmd_vel_arbiter_core.py
   scripts/multisource_fusion_core.py
   scripts/uwb_data_model.py
+  scripts/uwb_input.py
   scripts/uwb_2d_estimator.py
   scripts/uwb_quality_gate.py
   scripts/uwb_driver_node.py
@@ -132,6 +133,8 @@ install(PROGRAMS scripts/cmd_vel_arbiter_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME cmd_vel_arbiter_node)
 install(PROGRAMS scripts/multisource_fusion_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME multisource_fusion_node)
+install(PROGRAMS scripts/uwb_replay_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME uwb_replay_node)
 
 install(PROGRAMS
   scripts/amcl_swing_relocalization_node.py
@@ -150,6 +153,7 @@ install(DIRECTORY
   config
   urdf
   behavior_trees
+  data
   DESTINATION share/${PROJECT_NAME}
 )
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import math
 import serial
 
 import rclpy
@@ -9,7 +8,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
-from uwb_data_model import UwbRangeObservation, UwbAnchorConfig
+from uwb_data_model import UwbAnchorConfig
+from uwb_input import build_logical_observations, parse_kt1_ranges
 from uwb_quality_gate import UwbQualityGate, UwbQualityConfig
 
 
@@ -32,8 +32,12 @@ class UwbDriverNode(Node):
         self.declare_parameter("anchor1_x", 2.40)
         self.declare_parameter("anchor1_y", 0.0)
 
-        self.declare_parameter("anchor2_x", 1.660)
-        self.declare_parameter("anchor2_y", 0.745)
+        self.declare_parameter("anchor2_x", 1.20)
+        self.declare_parameter("anchor2_y", 1.80)
+        self.declare_parameter("pose_topic", "/dg/uwb/pose")
+        self.declare_parameter("quality_topic", "/dg/uwb/quality")
+        self.declare_parameter("frame_id", "uwb")
+        self.declare_parameter("six_logical_slots", True)
 
         port = self.get_parameter("port").value
         baud = int(self.get_parameter("baud").value)
@@ -66,13 +70,13 @@ class UwbDriverNode(Node):
 
         self.pose_pub = self.create_publisher(
             PoseWithCovarianceStamped,
-            "/dg/uwb/pose",
+            str(self.get_parameter("pose_topic").value),
             10,
         )
 
         self.quality_pub = self.create_publisher(
             DiagnosticArray,
-            "/dg/uwb/quality",
+            str(self.get_parameter("quality_topic").value),
             10,
         )
 
@@ -81,6 +85,7 @@ class UwbDriverNode(Node):
             baud,
             timeout=0,
         )
+        self._rx_buffer = ""
 
         self.timer = self.create_timer(0.02, self.read_serial)
 
@@ -90,76 +95,27 @@ class UwbDriverNode(Node):
 
     def read_serial(self):
 
-        line = self.ser.readline().decode(
-            "utf-8",
-            errors="ignore"
-        ).strip()
-
-        if not line.startswith("$KT1"):
+        waiting = int(self.ser.in_waiting)
+        if waiting <= 0:
             return
+        self._rx_buffer += self.ser.read(waiting).decode("utf-8", errors="ignore")
+        while "\n" in self._rx_buffer:
+            line, self._rx_buffer = self._rx_buffer.split("\n", 1)
+            self.process_line(line)
 
-        parts = line.split(",")
-
-        if len(parts) < 6:
+    def process_line(self, line):
+        ranges = parse_kt1_ranges(line)
+        if ranges is None:
             return
-
-        # 今天实机已经确认：
-        # parts[3] = 硬件 A2
-        # parts[4] = 硬件 A3
-        # parts[5] = 硬件 A4
-        raw_ranges = parts[3:6]
-
-        if any(v == "NULL" for v in raw_ranges):
-            return
-
-        try:
-            ranges = [float(v) for v in raw_ranges]
-        except ValueError:
-            return
-
-        if not all(math.isfinite(v) for v in ranges):
-            return
-
         now = self.get_clock().now().nanoseconds / 1e9
-
-        observations = [
-            UwbRangeObservation(
-                timestamp=now,
-                logical_anchor_id="A0",
-                physical_source_id=0,
-                correlation_group=0,
-                range_m=ranges[0],
-                valid=True,
-            ),
-            UwbRangeObservation(
-                timestamp=now,
-                logical_anchor_id="A1",
-                physical_source_id=1,
-                correlation_group=1,
-                range_m=ranges[1],
-                valid=True,
-            ),
-            UwbRangeObservation(
-                timestamp=now,
-                logical_anchor_id="A2",
-                physical_source_id=2,
-                correlation_group=2,
-                range_m=ranges[2],
-                valid=True,
-            ),
-        ]
-
-        estimate, decision = self.gate.update(
-            observations,
+        observations = build_logical_observations(
             now,
+            ranges,
+            six_logical_slots=bool(self.get_parameter("six_logical_slots").value),
         )
-
+        estimate, decision = self.gate.update(observations, now)
         self.publish_quality(estimate, decision)
-
-        if estimate is not None and decision in (
-            "ACCEPT",
-            "ACCEPT_DEGRADED",
-        ):
+        if estimate is not None and decision in ("ACCEPT", "ACCEPT_DEGRADED"):
             self.publish_pose(estimate)
 
     def publish_pose(self, estimate):
@@ -167,7 +123,7 @@ class UwbDriverNode(Node):
         msg = PoseWithCovarianceStamped()
 
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "uwb"
+        msg.header.frame_id = str(self.get_parameter("frame_id").value)
 
         msg.pose.pose.position.x = estimate.x
         msg.pose.pose.position.y = estimate.y
@@ -217,6 +173,9 @@ class UwbDriverNode(Node):
             ),
             "unique_anchor_count":
                 self.gate.state.unique_physical_count,
+            "logical_anchor_count": 6 if bool(self.get_parameter("six_logical_slots").value) else 3,
+            "physical_source_count": 3,
+            "logical_physical_mapping": "A0:0,A1:1,A2:2,A3:0,A4:1,A5:2",
             "rejection_reason":
                 self.gate.state.rejection_reason,
         }

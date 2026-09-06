@@ -65,6 +65,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("lidar_quality_topic", "/dg/lidar/quality")
             self.declare_parameter("gnss_quality_topic", "/dg/gnss/quality")
             self.declare_parameter("match_quality_topic", "/dg/relocalization/match_quality")
+            self.declare_parameter("uwb_quality_topic", "/dg/uwb/quality")
             self.declare_parameter("relocalization_status_topic", "/dg/relocalization/status")
             self.declare_parameter("amcl_pose_topic", "/amcl_pose")
             self.declare_parameter("odom_topic", "/odom")
@@ -93,6 +94,8 @@ def create_node(node_name: str) -> Any:
             self._lidar_received_at: float | None = None
             self._scan_match_state: str | None = None
             self._scan_match_received_at: float | None = None
+            self._uwb_state: str | None = None
+            self._uwb_received_at: float | None = None
             self._relocalization_state: str | None = None
             self._relocalization_received_at: float | None = None
             self._amcl_received_at: float | None = None
@@ -114,6 +117,10 @@ def create_node(node_name: str) -> Any:
             self.create_subscription(
                 DiagnosticArray, str(self.get_parameter("match_quality_topic").value),
                 lambda message: self._on_quality("scan_match", message), 10
+            )
+            self.create_subscription(
+                DiagnosticArray, str(self.get_parameter("uwb_quality_topic").value),
+                lambda message: self._on_quality("uwb", message), 10
             )
             self.create_subscription(
                 DiagnosticArray, str(self.get_parameter("relocalization_status_topic").value),
@@ -169,6 +176,8 @@ def create_node(node_name: str) -> Any:
                 self._lidar_state, self._lidar_received_at = observation.state, received_at
             elif signal == "gnss":
                 self._gnss_state, self._gnss_received_at = observation.state, received_at
+            elif signal == "uwb":
+                self._uwb_state, self._uwb_received_at = observation.state, received_at
             else:
                 self._scan_match_state, self._scan_match_received_at = observation.state, received_at
 
@@ -210,6 +219,8 @@ def create_node(node_name: str) -> Any:
                     scan_match_fresh=self._fresh(self._scan_match_received_at, now),
                     relocalization_state=self._relocalization_state,
                     relocalization_fresh=self._fresh(self._relocalization_received_at, now),
+                    uwb_state=self._uwb_state,
+                    uwb_fresh=self._fresh(self._uwb_received_at, now),
                     required_signals=self._required_signals,
                 )
             )
@@ -236,6 +247,7 @@ def create_node(node_name: str) -> Any:
                 "amcl_state": output.amcl_state,
                 "scan_match_state": output.scan_match_state,
                 "relocalization_state": output.relocalization_state,
+                "uwb_state": output.uwb_state,
                 "overall_state": output.overall_state,
                 "reasons": ";".join(output.reasons),
                 "timestamp": output.timestamp,

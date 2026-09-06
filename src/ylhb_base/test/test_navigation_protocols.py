@@ -17,6 +17,8 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             SCRIPTS / "navigation_health_node.py",
             SCRIPTS / "cmd_vel_arbiter_core.py",
             SCRIPTS / "cmd_vel_arbiter_node.py",
+            SCRIPTS / "uwb_input.py",
+            SCRIPTS / "uwb_replay_node.py",
             LAUNCH,
         ):
             ast.parse(path.read_text(encoding="utf-8"))
@@ -30,6 +32,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             "active_relocalization_node",
             "navigation_health_node",
             "cmd_vel_arbiter_node",
+            "uwb_replay_node",
         ):
             self.assertIn(f'executable="{executable}"', text)
 
@@ -59,6 +62,14 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertIn('DeclareLaunchArgument("map", default_value=default_map)', text)
         self.assertNotIn('DeclareLaunchArgument("map", default_value="")', text)
 
+    def test_launch_defaults_motion_output_and_uwb_alignment_disabled(self) -> None:
+        text = LAUNCH.read_text(encoding="utf-8")
+        self.assertIn('"enable_cmd_vel_arbiter",', text)
+        self.assertIn('default_value="/dg/test_cmd_vel"', text)
+        self.assertIn('condition=IfCondition(enable_cmd_vel_arbiter)', text)
+        self.assertIn('"enable_uwb_replay",', text)
+        self.assertIn('DeclareLaunchArgument("uwb_alignment_enabled", default_value="false")', text)
+
     def test_cmake_installs_new_wrappers_and_registers_tests(self) -> None:
         text = CMAKE.read_text(encoding="utf-8")
         for script in (
@@ -66,6 +77,8 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             "navigation_health_node.py",
             "cmd_vel_arbiter_core.py",
             "cmd_vel_arbiter_node.py",
+            "uwb_input.py",
+            "uwb_replay_node.py",
         ):
             self.assertIn(f"scripts/{script}", text)
         for test_name in (
@@ -103,7 +116,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             self.assertIn(field, scan_map)
         for field in ("state", "attempt_id", "request_candidate", "seed_source"):
             self.assertIn(field, active)
-        for field in ("gnss_state", "lidar_state", "amcl_state", "scan_match_state", "relocalization_state", "overall_state", "reasons", "timestamp"):
+        for field in ("gnss_state", "lidar_state", "uwb_state", "amcl_state", "scan_match_state", "relocalization_state", "overall_state", "reasons", "timestamp"):
             self.assertIn(field, health)
 
     def test_health_and_arbiter_have_freshness_guards(self) -> None:

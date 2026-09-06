@@ -98,7 +98,14 @@ class UwbQualityGate:
             self._transition_to_rejected()
             return None, "REJECT"
 
-        latest_time = max(obs.timestamp for obs in observations if obs.valid)
+        valid_observations = [obs for obs in observations if obs.valid]
+        if not valid_observations:
+            self.state.unique_physical_count = 0
+            self.state.rejection_reason = "NO_VALID_OBSERVATIONS"
+            self._transition_to_rejected()
+            return None, "REJECT"
+
+        latest_time = max(obs.timestamp for obs in valid_observations)
         age = now - latest_time
 
         if age > self.config.freshness_timeout:
