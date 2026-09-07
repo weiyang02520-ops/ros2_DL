@@ -6,6 +6,18 @@ set -e  # Exit on any error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BASE_WS="${DG_BASE_WS:-/home/nvidia/ros2_DL}"
+ROS_DISTRO="${ROS_DISTRO:-humble}"
+
+set +u
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+if [ -f "${BASE_WS}/install/setup.bash" ]; then
+    source "${BASE_WS}/install/setup.bash"
+else
+    echo "Robot base workspace is not built: ${BASE_WS}" >&2
+    exit 2
+fi
+set -u
 
 echo "===DG202611 PREFLIGHT CHECKS==="
 echo "Repository: $REPO_ROOT"

@@ -2,6 +2,27 @@
 set -euo pipefail
 
 integration_ws="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export WS_DIR="${WS_DIR:-${integration_ws}}"
+base_ws="${DG_BASE_WS:-/home/nvidia/ros2_DL}"
+ros_distro="${ROS_DISTRO:-humble}"
 
-exec "${integration_ws}/scripts/run_on_jetson.sh" dg_integration "$@"
+if [ ! -f "/opt/ros/${ros_distro}/setup.bash" ]; then
+  echo "ROS 2 setup is missing: /opt/ros/${ros_distro}/setup.bash" >&2
+  exit 2
+fi
+if [ ! -f "${base_ws}/install/setup.bash" ]; then
+  echo "Robot base workspace is not built: ${base_ws}" >&2
+  exit 2
+fi
+if [ ! -f "${integration_ws}/install/setup.bash" ]; then
+  echo "DG integration workspace is not built: ${integration_ws}" >&2
+  exit 2
+fi
+
+set +u
+source "/opt/ros/${ros_distro}/setup.bash"
+source "${base_ws}/install/setup.bash"
+source "${integration_ws}/install/setup.bash"
+set -u
+
+cd "${integration_ws}"
+exec ros2 launch ylhb_base dg_navigation_integration.launch.py "$@"

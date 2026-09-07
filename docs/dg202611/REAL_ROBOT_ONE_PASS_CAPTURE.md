@@ -98,7 +98,7 @@ MODEL-2 重复率仅对第2～5项中机器人保持静止的区间解释。评�
 
 ```bash
 # 终端A：观察模式；关闭真实候选生产器和速度仲裁器
-./scripts/run_on_jetson.sh dg_integration \
+./scripts/run_dg_integration.sh \
   enable_nav2:=false \
   enable_scan_map:=false \
   enable_cmd_vel_arbiter:=false

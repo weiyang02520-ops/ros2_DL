@@ -10,6 +10,7 @@ LAUNCH = ROOT / "launch" / "dg_navigation_integration.launch.py"
 UWB_EVIDENCE_LAUNCH = ROOT / "launch" / "uwb_model1_replay_evidence.launch.py"
 CMAKE = ROOT / "CMakeLists.txt"
 REPOSITORY_ROOT = ROOT.parents[1]
+DG_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_integration.sh"
 
 
 class NavigationProtocolAndLaunchTests(unittest.TestCase):
@@ -139,6 +140,16 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
     def test_default_bringup_does_not_include_competition_launch(self) -> None:
         text = (ROOT / "launch" / "bringup.launch.py").read_text(encoding="utf-8")
         self.assertNotIn("dg_navigation_integration", text)
+
+    def test_dg_runner_loads_base_then_isolated_overlay(self) -> None:
+        text = DG_RUNNER.read_text(encoding="utf-8")
+        base_source = 'source "${base_ws}/install/setup.bash"'
+        integration_source = 'source "${integration_ws}/install/setup.bash"'
+        self.assertIn(base_source, text)
+        self.assertIn(integration_source, text)
+        self.assertLess(text.index(base_source), text.index(integration_source))
+        self.assertIn("dg_navigation_integration.launch.py", text)
+        self.assertNotIn("topic pub", text)
 
     def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")
