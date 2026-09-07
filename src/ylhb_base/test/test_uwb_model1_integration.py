@@ -282,6 +282,31 @@ def test_uwb_05_logical6_physical3_dedup():
     return True
 
 
+def test_measured_uwb_can_initialize_isolated_model1_evidence_without_odom():
+    fusion = MultisourceFusionCore(FusionConfig())
+    measurement = UwbPositionMeasurement(
+        x=1.2,
+        y=0.8,
+        timestamp=1.0,
+        state="GOOD",
+        fresh=True,
+        accepted=True,
+        residual_rms=0.05,
+        geometry_score=0.8,
+        unique_anchor_count=3,
+        confidence=0.9,
+    )
+
+    output = fusion.process(FusionInput(now=1.0, uwb=measurement))
+
+    assert output.fusion_mode == UWB_AIDED
+    assert output.accepted_source == "UWB"
+    assert output.global_anchored
+    assert output.map_pose is not None
+    assert output.map_pose.x == 1.2
+    assert output.map_pose.y == 0.8
+
+
 def test_uwb_06_measured_protocol_and_missing_anchor_rejection():
     """The measured KT1 protocol maps to six logical slots without inventing sources."""
     ranges = parse_kt1_ranges(

@@ -57,6 +57,7 @@ def create_node(node_name: str) -> Any:
     from geometry_msgs.msg import PoseWithCovarianceStamped
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
+    from rclpy.qos import qos_profile_sensor_data
     from sensor_msgs.msg import LaserScan
 
     class NavigationHealthNode(Node):
@@ -134,7 +135,10 @@ def create_node(node_name: str) -> Any:
                 Odometry, str(self.get_parameter("odom_topic").value), self._on_odom, 10
             )
             self.create_subscription(
-                LaserScan, str(self.get_parameter("scan_topic").value), self._on_scan, 10
+                LaserScan,
+                str(self.get_parameter("scan_topic").value),
+                self._on_scan,
+                qos_profile_sensor_data,
             )
             self._timer = self.create_timer(float(self.get_parameter("timer_period").value), self._tick)
             self.get_logger().info("unified DG-202611 navigation health side-channel active")

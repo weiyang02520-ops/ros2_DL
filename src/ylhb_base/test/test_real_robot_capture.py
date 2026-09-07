@@ -16,12 +16,22 @@ from real_robot_capture import (  # noqa: E402
     write_json,
 )
 
+YLHB_SCRIPTS = REPO_ROOT / "src" / "ylhb_base" / "scripts"
+if str(YLHB_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(YLHB_SCRIPTS))
+
+from evidence_capture_node import (  # noqa: E402
+    RelocalizationAttemptTracker,
+    encode_feature_points,
+)
+
 
 def test_capture_topics_cover_all_three_models_and_uwb():
     required = {
         "/scan",
         "/odom",
         "/dg/lidar/quality",
+        "/dg/lidar/stable_features",
         "/dg/uwb/pose",
         "/dg/uwb/quality",
         "/dg/fusion/status",
@@ -69,3 +79,36 @@ def test_capture_script_has_no_ros_motion_publish_command():
     source = (SCRIPTS / "real_robot_capture.py").read_text(encoding="utf-8")
     assert "ros2 topic pub" not in source
     assert '("ros2", "topic", "pub"' not in source
+
+
+def test_structured_capture_preserves_features_and_one_terminal_event_per_attempt():
+    source = (YLHB_SCRIPTS / "evidence_capture_node.py").read_text(encoding="utf-8")
+    assert "create_publisher" not in source
+    assert "create_client" not in source
+    assert "ActionClient" not in source
+
+    class Position:
+        x = 1.25
+        y = -0.5
+
+    class Pose:
+        position = Position()
+
+    assert encode_feature_points([Pose()]) == "[[1.25,-0.5]]"
+
+    tracker = RelocalizationAttemptTracker()
+    recovered = {
+        "timestamp": "12.5",
+        "attempt_id": "3",
+        "state": "RECOVERED",
+        "elapsed": "4.25",
+        "failure_reason": "",
+    }
+    assert tracker.consume(recovered, 13.0) == {
+        "timestamp": 12.5,
+        "attempt_id": 3,
+        "outcome": "RECOVERED",
+        "time_to_recovery": 4.25,
+        "failure_reason": "",
+    }
+    assert tracker.consume(recovered, 13.1) is None

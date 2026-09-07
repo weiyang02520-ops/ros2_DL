@@ -32,6 +32,7 @@ def generate_launch_description():
     enable_nav2 = LaunchConfiguration("enable_nav2")
     enable_cmd_vel_arbiter = LaunchConfiguration("enable_cmd_vel_arbiter")
     enable_multisource_fusion = LaunchConfiguration("enable_multisource_fusion")
+    enable_scan_map = LaunchConfiguration("enable_scan_map")
     enable_uwb_replay = LaunchConfiguration("enable_uwb_replay")
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_file = LaunchConfiguration("map")
@@ -68,7 +69,15 @@ def generate_launch_description():
         executable="lidar_robust_node",
         name="dg_lidar_robust_node",
         output="screen",
-        parameters=[{"scan_topic": "/scan", "odom_topic": "/odom", "quality_topic": "/dg/lidar/quality"}],
+        parameters=[
+            {
+                "scan_topic": "/scan",
+                "odom_topic": "/odom",
+                "filtered_scan_topic": "/dg/lidar/filtered_scan",
+                "stable_features_topic": "/dg/lidar/stable_features",
+                "quality_topic": "/dg/lidar/quality",
+            }
+        ],
     )
     gnss = Node(
         package="ylhb_base",
@@ -103,10 +112,11 @@ def generate_launch_description():
         executable="scan_map_relocalization_node",
         name="dg_scan_map_relocalization_node",
         output="screen",
+        condition=IfCondition(enable_scan_map),
         parameters=[
             {
                 "map_topic": "/map",
-                "scan_topic": "/scan",
+                "scan_topic": "/dg/lidar/filtered_scan",
                 "initialpose_topic": "/initialpose",
                 "seed_topic": "/dg/relocalization/seed",
                 "scan_match_pose_topic": "/scan_match_pose",
@@ -121,7 +131,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "scan_topic": "/scan",
+                "scan_topic": "/dg/lidar/filtered_scan",
                 "odom_topic": "/odom",
                 "amcl_pose_topic": "/amcl_pose",
                 "lidar_quality_topic": "/dg/lidar/quality",
@@ -209,6 +219,11 @@ def generate_launch_description():
                 "enable_multisource_fusion",
                 default_value="true",
                 description="Start the DG side-channel multi-source fusion layer",
+            ),
+            DeclareLaunchArgument(
+                "enable_scan_map",
+                default_value="true",
+                description="Start the real scan-to-map candidate producer",
             ),
             DeclareLaunchArgument(
                 "enable_uwb_replay",

@@ -8,6 +8,7 @@ import csv
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -31,6 +32,8 @@ DEFAULT_TOPICS = (
     "/cmd_vel",
     "/zlac8015d/status",
     "/dg/lidar/quality",
+    "/dg/lidar/filtered_scan",
+    "/dg/lidar/stable_features",
     "/dg/gnss/quality",
     "/dg/uwb/pose",
     "/dg/uwb/quality",
@@ -228,6 +231,19 @@ def terminate_process(process: subprocess.Popen[str] | None, timeout: float = 15
             return process.wait(timeout=5.0)
 
 
+def wait_for_ready_file(
+    path: Path, process: subprocess.Popen[str], timeout: float = 10.0
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.is_file():
+            return True
+        if process.poll() is not None:
+            return False
+        time.sleep(0.1)
+    return path.is_file()
+
+
 def build_manifest(session: Path) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
     for path in sorted(session.rglob("*")):
@@ -254,6 +270,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hardware-notes", default="")
     parser.add_argument("--sample-period", type=float, default=1.0)
     parser.add_argument("--topic", action="append", default=[], help="Additional absolute ROS topic")
+    parser.add_argument("--estimated-pose-topic", default="/dg/fusion/pose")
+    parser.add_argument("--ground-truth-x", type=float)
+    parser.add_argument("--ground-truth-y", type=float)
+    parser.add_argument("--ground-truth-frame", default="map")
     parser.add_argument("--repo", default=str(Path(__file__).resolve().parents[1]))
     return parser
 
@@ -264,6 +284,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--duration must be non-negative")
     if arguments.sample_period <= 0.0:
         raise SystemExit("--sample-period must be positive")
+    ground_truth_supplied = (
+        arguments.ground_truth_x is not None,
+        arguments.ground_truth_y is not None,
+    )
+    if ground_truth_supplied[0] != ground_truth_supplied[1]:
+        raise SystemExit("--ground-truth-x and --ground-truth-y must be supplied together")
+    if not arguments.estimated_pose_topic.startswith("/"):
+        raise SystemExit("--estimated-pose-topic must be an absolute ROS topic")
+    if not arguments.ground_truth_frame.strip():
+        raise SystemExit("--ground-truth-frame must not be empty")
+    if all(ground_truth_supplied) and not all(
+        math.isfinite(value) for value in (arguments.ground_truth_x, arguments.ground_truth_y)
+    ):
+        raise SystemExit("ground-truth coordinates must be finite")
     if shutil.which("ros2") is None:
         print("ERROR: ros2 is unavailable; source the ROS 2 and integration workspaces first.", file=sys.stderr)
         return 2
@@ -299,6 +333,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "repository": str(repository),
         "git": git_snapshot(repository),
         "topics": list(topics),
+        "evaluation_capture": {
+            "estimated_pose_topic": arguments.estimated_pose_topic,
+            "ground_truth_enabled": all(ground_truth_supplied),
+            "ground_truth_x": arguments.ground_truth_x,
+            "ground_truth_y": arguments.ground_truth_y,
+            "ground_truth_frame": arguments.ground_truth_frame,
+        },
         "safety": {
             "publishes_motion_commands": False,
             "requires_human_supervision_for_motion": True,
@@ -317,6 +358,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         snapshot_results[f"parameters/{filename}"] = run_snapshot(
             ("ros2", "param", "dump", node), parameter_dir / filename, timeout=10.0
         )
+
+    structured_dir = session / "structured"
+    structured_dir.mkdir()
+    evidence_ready_file = structured_dir / "READY.json"
+    evidence_start_file = structured_dir / "START.json"
+    evidence_script = repository / "src" / "ylhb_base" / "scripts" / "evidence_capture_node.py"
+    if not evidence_script.is_file():
+        raise RuntimeError(f"structured evidence node is missing: {evidence_script}")
+    evidence_command = [
+        sys.executable,
+        str(evidence_script),
+        "--output-dir",
+        str(structured_dir),
+        "--ready-file",
+        str(evidence_ready_file),
+        "--start-file",
+        str(evidence_start_file),
+        "--estimated-pose-topic",
+        arguments.estimated_pose_topic,
+        "--ground-truth-frame",
+        arguments.ground_truth_frame,
+    ]
+    if all(ground_truth_supplied):
+        evidence_command.extend(
+            [
+                "--ground-truth-x",
+                str(arguments.ground_truth_x),
+                "--ground-truth-y",
+                str(arguments.ground_truth_y),
+            ]
+        )
+    evidence_log_handle = (logs / "structured_evidence.log").open("w", encoding="utf-8")
+    evidence_process = subprocess.Popen(
+        evidence_command,
+        stdout=evidence_log_handle,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
 
     bag_path = session / "rosbag"
     bag_log_handle = (logs / "rosbag.log").open("w", encoding="utf-8")
@@ -348,13 +428,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     started_utc: str | None = None
     started_monotonic: float | None = None
     try:
+        if not wait_for_ready_file(evidence_ready_file, evidence_process):
+            raise RuntimeError(
+                f"structured evidence logger did not become ready; code={evidence_process.poll()}"
+            )
         time.sleep(1.0)
         if recorder.poll() is not None:
             raise RuntimeError(f"ros2 bag recorder exited early with code {recorder.returncode}")
+        if evidence_process.poll() is not None:
+            raise RuntimeError(
+                f"structured evidence logger exited early with code {evidence_process.returncode}"
+            )
         started_utc = utc_now()
         started_monotonic = time.monotonic()
         metadata["started_utc"] = started_utc
         write_json(session / "metadata.json", metadata)
+        write_json(
+            evidence_start_file,
+            {"started_utc": started_utc, "monotonic_sec": started_monotonic},
+        )
         capture_ready = True
         print(f"CAPTURE_READY: {session}", flush=True)
         with resource_path.open("w", newline="", encoding="utf-8") as resource_handle:
@@ -369,6 +461,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 resource_handle.flush()
                 if recorder.poll() is not None:
                     raise RuntimeError(f"ros2 bag recorder stopped with code {recorder.returncode}")
+                if evidence_process.poll() is not None:
+                    raise RuntimeError(
+                        f"structured evidence logger stopped with code {evidence_process.returncode}"
+                    )
                 time.sleep(arguments.sample_period)
     except KeyboardInterrupt:
         interrupted = True
@@ -376,8 +472,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         capture_error = f"{type(error).__name__}: {error}"
     finally:
         recorder_code = terminate_process(recorder)
+        evidence_code = terminate_process(evidence_process)
         tegrastats_code = terminate_process(tegrastats_process)
         bag_log_handle.close()
+        evidence_log_handle.close()
         if tegrastats_log_handle is not None:
             tegrastats_log_handle.close()
 
@@ -391,12 +489,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     bag_metadata = bag_path / "metadata.yaml"
+    structured_summary = structured_dir / "capture_summary.json"
     result = {
         "schema_version": 1,
         "run_class": "REAL_ROBOT_CAPTURE",
         "evaluation_status": "NOT_EVALUATED",
         "capture_status": (
-            "COMPLETE" if capture_ready and capture_error is None and bag_metadata.is_file() else "FAILED"
+            "COMPLETE"
+            if capture_ready
+            and capture_error is None
+            and bag_metadata.is_file()
+            and structured_summary.is_file()
+            else "FAILED"
         ),
         "capture_ready": capture_ready,
         "experiment_id": session.name,
@@ -405,6 +509,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "actual_duration_sec": actual_duration,
         "interrupted_by_operator": interrupted,
         "rosbag_return_code": recorder_code,
+        "structured_evidence_return_code": evidence_code,
+        "structured_evidence_ready": evidence_ready_file.is_file(),
+        "structured_evidence_started": evidence_start_file.is_file(),
+        "structured_evidence_summary_present": structured_summary.is_file(),
         "tegrastats_return_code": tegrastats_code,
         "rosbag_path": str(bag_path),
         "rosbag_present": bag_path.exists(),
@@ -422,7 +530,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(session)
     if result["capture_status"] != "COMPLETE":
-        print(f"ERROR: capture failed: {capture_error or 'rosbag metadata is missing'}", file=sys.stderr)
+        print(
+            f"ERROR: capture failed: {capture_error or 'rosbag metadata or structured evidence summary is missing'}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

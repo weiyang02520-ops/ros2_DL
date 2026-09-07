@@ -95,6 +95,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("fusion_pose_topic", "/dg/fusion/pose")
             self.declare_parameter("fusion_status_topic", "/dg/fusion/status")
             self.declare_parameter("output_frame_id", "map")
+            self.declare_parameter("unanchored_output_frame_id", "odom")
             self.declare_parameter("output_child_frame_id", "base_footprint")
             self.declare_parameter("publish_tf", False)
             self.declare_parameter("freshness_timeout", 2.0)
@@ -129,10 +130,17 @@ def create_node(node_name: str) -> Any:
                 )
             self._timeout = float(self.get_parameter("freshness_timeout").value)
             self._output_frame_id = str(self.get_parameter("output_frame_id").value).strip()
+            self._unanchored_output_frame_id = str(
+                self.get_parameter("unanchored_output_frame_id").value
+            ).strip()
             self._output_child_frame_id = str(
                 self.get_parameter("output_child_frame_id").value
             ).strip()
-            if not self._output_frame_id or not self._output_child_frame_id:
+            if (
+                not self._output_frame_id
+                or not self._unanchored_output_frame_id
+                or not self._output_child_frame_id
+            ):
                 raise ValueError("output frame identifiers must not be empty")
             self._core = MultisourceFusionCore(
                 FusionConfig(
@@ -529,11 +537,16 @@ def create_node(node_name: str) -> Any:
 
         def _publish(self, output: Any) -> None:
             stamp = self.get_clock().now().to_msg()
+            frame_id = (
+                self._output_frame_id
+                if output.global_anchored
+                else self._unanchored_output_frame_id
+            )
             if output.map_pose is not None:
                 pose = output.map_pose
                 odom = Odometry()
                 odom.header.stamp = stamp
-                odom.header.frame_id = self._output_frame_id
+                odom.header.frame_id = frame_id
                 odom.child_frame_id = self._output_child_frame_id
                 odom.pose.pose.position.x = pose.x
                 odom.pose.pose.position.y = pose.y
@@ -558,7 +571,8 @@ def create_node(node_name: str) -> Any:
                 "fusion_mode": output.fusion_mode,
                 "accepted_source": output.accepted_source or "NONE",
                 "updated": output.updated,
-                "output_frame_id": self._output_frame_id,
+                "output_frame_id": frame_id,
+                "configured_global_frame_id": self._output_frame_id,
                 "output_child_frame_id": self._output_child_frame_id,
                 "uwb_alignment_ready": self._uwb_alignment_ready,
                 "position_uncertainty": output.position_uncertainty,

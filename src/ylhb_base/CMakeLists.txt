@@ -135,6 +135,10 @@ install(PROGRAMS scripts/multisource_fusion_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME multisource_fusion_node)
 install(PROGRAMS scripts/uwb_replay_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME uwb_replay_node)
+install(PROGRAMS scripts/evidence_capture_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME evidence_capture_node)
+install(PROGRAMS scripts/invalid_candidate_injector_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME invalid_candidate_injector_node)
 
 install(PROGRAMS
   scripts/amcl_swing_relocalization_node.py

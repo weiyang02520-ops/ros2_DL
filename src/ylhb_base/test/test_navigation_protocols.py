@@ -21,6 +21,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             SCRIPTS / "cmd_vel_arbiter_node.py",
             SCRIPTS / "uwb_input.py",
             SCRIPTS / "uwb_replay_node.py",
+            SCRIPTS / "invalid_candidate_injector_node.py",
             LAUNCH,
             UWB_EVIDENCE_LAUNCH,
         ):
@@ -47,6 +48,8 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             "/gps/fix",
             "/gps/rtk_status",
             "/dg/lidar/quality",
+            "/dg/lidar/filtered_scan",
+            "/dg/lidar/stable_features",
             "/dg/gnss/quality",
             "/dg/relocalization/seed",
             "/dg/relocalization/match_quality",
@@ -56,6 +59,11 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             "/dg/navigation/status",
         ):
             self.assertIn(topic, text)
+        self.assertEqual(text.count('"scan_topic": "/dg/lidar/filtered_scan"'), 2)
+        self.assertRegex(
+            text,
+            r'DeclareLaunchArgument\(\s*"enable_scan_map"',
+        )
 
     def test_launch_defaults_nav2_disabled_and_remaps_cmd_vel(self) -> None:
         text = LAUNCH.read_text(encoding="utf-8")
@@ -103,9 +111,10 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
     def test_fusion_wrapper_publishes_configured_output_frame(self) -> None:
         text = (SCRIPTS / "multisource_fusion_node.py").read_text(encoding="utf-8")
         self.assertIn('self.declare_parameter("output_frame_id", "map")', text)
-        self.assertIn("odom.header.frame_id = self._output_frame_id", text)
+        self.assertIn('self.declare_parameter("unanchored_output_frame_id", "odom")', text)
+        self.assertIn("odom.header.frame_id = frame_id", text)
         self.assertIn("odom.child_frame_id = self._output_child_frame_id", text)
-        self.assertIn('"output_frame_id": self._output_frame_id', text)
+        self.assertIn('"output_frame_id": frame_id', text)
 
     def test_cmake_installs_new_wrappers_and_registers_tests(self) -> None:
         text = CMAKE.read_text(encoding="utf-8")
@@ -116,6 +125,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             "cmd_vel_arbiter_node.py",
             "uwb_input.py",
             "uwb_replay_node.py",
+            "invalid_candidate_injector_node.py",
         ):
             self.assertIn(f"scripts/{script}", text)
         for test_name in (
@@ -138,6 +148,13 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         text = LAUNCH.read_text(encoding="utf-8")
         self.assertNotIn("ekf.yaml", text)
         self.assertNotIn("NavSatTransform", text)
+
+    def test_controlled_invalid_candidate_tool_has_no_motion_interface(self) -> None:
+        text = (SCRIPTS / "invalid_candidate_injector_node.py").read_text(encoding="utf-8")
+        self.assertIn("DiagnosticArray", text)
+        self.assertIn("CONTROLLED_INVALID_CANDIDATE", text)
+        self.assertNotIn("Twist", text)
+        self.assertNotIn("/cmd_vel", text)
 
     def test_poc_publishers_and_health_parser_share_real_field_names(self) -> None:
         lidar = (SCRIPTS / "lidar_robust_features.py").read_text(encoding="utf-8")

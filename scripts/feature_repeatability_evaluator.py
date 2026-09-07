@@ -1,175 +1,244 @@
 #!/usr/bin/env python3
-"""
-Feature repeatability evaluator for DG202611 experiments.
+"""Evaluate LiDAR feature repeatability from consecutive real scan frames."""
 
-Computes repeatability metrics for LiDAR features across consecutive frames.
-"""
+from __future__ import annotations
 
-import sys
+import argparse
 import csv
-from dataclasses import dataclass
-from typing import List, Dict, Optional
+from dataclasses import asdict, dataclass
+import json
+import math
+from pathlib import Path
+import sys
+from typing import List, Optional, Sequence
 
 
 @dataclass
 class FrameFeatures:
-    """Features detected in one frame."""
+    """Features detected in one frame.
+
+    ``feature_points`` is the real-robot format. ``feature_ids`` remains
+    supported for older synthetic data.
+    """
+
     frame_id: int
     timestamp: float
     feature_ids: List[int]
     valid_feature_count: int
+    feature_points: List[tuple[float, float]] | None = None
+    coordinate_frame: str = ""
 
 
 @dataclass
 class RepeatabilityMetrics:
-    """Feature repeatability statistics."""
     total_frames: int
     total_pairs: int
+    zero_feature_pair_count: int
     total_features: int
     repeated_features: int
     overall_repeatability: float
+    min_repeatability: float
     per_frame_repeatability: List[float]
     mean_per_frame: float
+    matching_method: str
+    match_distance_m: float
 
 
-def compute_frame_pair_repeatability(frame1: FrameFeatures, frame2: FrameFeatures) -> Optional[float]:
-    """Compute repeatability between two consecutive frames.
+def _spatial_match_count(
+    first: Sequence[tuple[float, float]],
+    second: Sequence[tuple[float, float]],
+    match_distance: float,
+) -> int:
+    limit_squared = match_distance * match_distance
+    adjacency: list[list[int]] = []
+    for first_index, (first_x, first_y) in enumerate(first):
+        candidates: list[tuple[float, int]] = []
+        for second_index, (second_x, second_y) in enumerate(second):
+            distance_squared = (first_x - second_x) ** 2 + (first_y - second_y) ** 2
+            if distance_squared <= limit_squared:
+                candidates.append((distance_squared, second_index))
+        adjacency.append([index for _, index in sorted(candidates)])
 
-    Repeatability = (# repeated features) / (# features in earlier frame)
+    matched_second: dict[int, int] = {}
 
-    Returns None if earlier frame has no features.
+    def augment(first_index: int, seen: set[int]) -> bool:
+        for second_index in adjacency[first_index]:
+            if second_index in seen:
+                continue
+            seen.add(second_index)
+            previous = matched_second.get(second_index)
+            if previous is None or augment(previous, seen):
+                matched_second[second_index] = first_index
+                return True
+        return False
+
+    return sum(augment(first_index, set()) for first_index in range(len(first)))
+
+
+def _pair_match_count(
+    first: FrameFeatures, second: FrameFeatures, match_distance: float
+) -> tuple[int, str]:
+    if first.feature_points is not None and second.feature_points is not None:
+        if (
+            first.coordinate_frame
+            and second.coordinate_frame
+            and first.coordinate_frame != second.coordinate_frame
+        ):
+            raise ValueError(
+                f"coordinate frame changed from {first.coordinate_frame!r} to {second.coordinate_frame!r}"
+            )
+        return _spatial_match_count(first.feature_points, second.feature_points, match_distance), "SPATIAL_2D"
+    return len(set(first.feature_ids) & set(second.feature_ids)), "LEGACY_ID"
+
+
+def compute_frame_pair_repeatability(
+    frame1: FrameFeatures, frame2: FrameFeatures, match_distance: float = 0.12
+) -> Optional[float]:
+    """Return symmetric repeatability: ``2M / (N1 + N2)``.
+
+    A pair with an empty frame is undefined and is counted separately by
+    :func:`compute_metrics`; it is never reported as perfect repeatability.
     """
-    if frame1.valid_feature_count == 0:
+
+    if frame1.valid_feature_count == 0 or frame2.valid_feature_count == 0:
         return None
-
-    # Find features present in both frames
-    repeated = len(set(frame1.feature_ids) & set(frame2.feature_ids))
-
-    return repeated / frame1.valid_feature_count
+    matched, _ = _pair_match_count(frame1, frame2, match_distance)
+    return 2.0 * matched / (frame1.valid_feature_count + frame2.valid_feature_count)
 
 
-def compute_metrics(frames: List[FrameFeatures]) -> Optional[RepeatabilityMetrics]:
-    """Compute overall repeatability metrics from frame sequence."""
+def compute_metrics(
+    frames: List[FrameFeatures], match_distance: float = 0.12
+) -> Optional[RepeatabilityMetrics]:
     if len(frames) < 2:
         return None
+    if not math.isfinite(match_distance) or match_distance <= 0.0:
+        raise ValueError("match_distance must be finite and positive")
 
-    per_frame_repeatability = []
+    pair_values: list[float] = []
     total_features = 0
     repeated_features = 0
-    valid_pairs = 0
+    zero_feature_pairs = 0
+    methods: set[str] = set()
+    for frame1, frame2 in zip(frames, frames[1:]):
+        if frame1.valid_feature_count == 0 or frame2.valid_feature_count == 0:
+            zero_feature_pairs += 1
+            continue
+        matched, method = _pair_match_count(frame1, frame2, match_distance)
+        methods.add(method)
+        denominator = frame1.valid_feature_count + frame2.valid_feature_count
+        pair_values.append(2.0 * matched / denominator)
+        repeated_features += matched
+        total_features += denominator
 
-    for i in range(len(frames) - 1):
-        frame1 = frames[i]
-        frame2 = frames[i + 1]
-
-        rep = compute_frame_pair_repeatability(frame1, frame2)
-        if rep is not None:
-            per_frame_repeatability.append(rep)
-
-            # Accumulate for overall metric
-            repeated = len(set(frame1.feature_ids) & set(frame2.feature_ids))
-            repeated_features += repeated
-            total_features += frame1.valid_feature_count
-            valid_pairs += 1
-
-    if valid_pairs == 0:
+    if not pair_values:
         return None
-
-    overall_repeatability = repeated_features / total_features if total_features > 0 else 0.0
-    mean_per_frame = sum(per_frame_repeatability) / len(per_frame_repeatability)
-
     return RepeatabilityMetrics(
         total_frames=len(frames),
-        total_pairs=valid_pairs,
+        total_pairs=len(pair_values),
+        zero_feature_pair_count=zero_feature_pairs,
         total_features=total_features,
         repeated_features=repeated_features,
-        overall_repeatability=overall_repeatability,
-        per_frame_repeatability=per_frame_repeatability,
-        mean_per_frame=mean_per_frame
+        overall_repeatability=2.0 * repeated_features / total_features,
+        min_repeatability=min(pair_values),
+        per_frame_repeatability=pair_values,
+        mean_per_frame=sum(pair_values) / len(pair_values),
+        matching_method="+".join(sorted(methods)),
+        match_distance_m=match_distance,
     )
 
 
+def _parse_feature_points(raw: str) -> list[tuple[float, float]]:
+    payload = json.loads(raw)
+    if not isinstance(payload, list):
+        raise ValueError("feature_points must be a JSON list")
+    points: list[tuple[float, float]] = []
+    for item in payload:
+        if not isinstance(item, list) or len(item) != 2:
+            raise ValueError("each feature point must be [x, y]")
+        x, y = float(item[0]), float(item[1])
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise ValueError("feature coordinates must be finite")
+        points.append((x, y))
+    return points
+
+
 def read_csv(filepath: str) -> List[FrameFeatures]:
-    """Read frame features from CSV file.
-
-    Expected columns: frame_id, timestamp, feature_ids (comma-separated), valid_feature_count
-    """
-    frames = []
-
-    with open(filepath, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+    frames: list[FrameFeatures] = []
+    with open(filepath, "r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for line_number, row in enumerate(reader, 2):
             try:
-                # Parse comma-separated feature IDs
-                feature_ids_str = row['feature_ids'].strip()
-                if feature_ids_str:
-                    feature_ids = [int(x) for x in feature_ids_str.split(',')]
+                raw_points = (row.get("feature_points") or "").strip()
+                raw_ids = (row.get("feature_ids") or "").strip()
+                if raw_points:
+                    points = _parse_feature_points(raw_points)
+                    ids: list[int] = []
+                    actual_count = len(points)
                 else:
-                    feature_ids = []
-
-                frame = FrameFeatures(
-                    frame_id=int(row['frame_id']),
-                    timestamp=float(row['timestamp']),
-                    feature_ids=feature_ids,
-                    valid_feature_count=int(row['valid_feature_count'])
+                    points = None
+                    ids = [int(value) for value in raw_ids.split(",") if value.strip()]
+                    actual_count = len(ids)
+                declared_count = int(row["valid_feature_count"])
+                if declared_count != actual_count:
+                    raise ValueError(
+                        f"valid_feature_count={declared_count} does not match captured features={actual_count}"
+                    )
+                frames.append(
+                    FrameFeatures(
+                        frame_id=int(row["frame_id"]),
+                        timestamp=float(row["timestamp"]),
+                        feature_ids=ids,
+                        valid_feature_count=declared_count,
+                        feature_points=points,
+                        coordinate_frame=(row.get("coordinate_frame") or "").strip(),
+                    )
                 )
-                frames.append(frame)
-            except (KeyError, ValueError) as e:
-                print(f"Warning: skipping invalid row: {e}", file=sys.stderr)
-                continue
-
-    # Sort by frame_id to ensure consecutive pairs
-    frames.sort(key=lambda f: f.frame_id)
-
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                print(f"Warning: skipping invalid row {line_number}: {error}", file=sys.stderr)
+    frames.sort(key=lambda frame: frame.frame_id)
     return frames
 
 
 def print_metrics(metrics: RepeatabilityMetrics) -> None:
-    """Print metrics in human-readable format."""
     print("Feature Repeatability Metrics:")
-    print(f"  Total Frames:         {metrics.total_frames}")
-    print(f"  Valid Pairs:          {metrics.total_pairs}")
-    print(f"  Total Features:       {metrics.total_features}")
-    print(f"  Repeated Features:    {metrics.repeated_features}")
-    print(f"  Overall Repeatability: {metrics.overall_repeatability:.4f}")
-    print(f"  Mean Per-Frame:       {metrics.mean_per_frame:.4f}")
+    print(f"  Total Frames:           {metrics.total_frames}")
+    print(f"  Valid Pairs:            {metrics.total_pairs}")
+    print(f"  Zero-Feature Pairs:     {metrics.zero_feature_pair_count}")
+    print(f"  Matched Feature Pairs:  {metrics.repeated_features}")
+    print(f"  Overall R_pool:         {metrics.overall_repeatability:.4f}")
+    print(f"  Mean R_avg:             {metrics.mean_per_frame:.4f}")
+    print(f"  Minimum R_min:          {metrics.min_repeatability:.4f}")
+    print(f"  Matching Method:        {metrics.matching_method}")
+    if metrics.matching_method == "SPATIAL_2D":
+        print(f"  Match Distance:         {metrics.match_distance_m:.3f} m")
 
-    if len(metrics.per_frame_repeatability) <= 10:
-        print(f"  Per-Frame Values:     {[f'{x:.3f}' for x in metrics.per_frame_repeatability]}")
+
+def create_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("csv_file")
+    parser.add_argument("--match-distance", type=float, default=0.12)
+    parser.add_argument("--output-json")
+    return parser
 
 
-def main():
-    """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: feature_repeatability_evaluator.py <csv_file>", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("CSV format: frame_id,timestamp,feature_ids,valid_feature_count", file=sys.stderr)
-        print("feature_ids: comma-separated integers (e.g., \"0,1,2,3\")", file=sys.stderr)
-        return 1
-
-    filepath = sys.argv[1]
-
+def main(argv: Sequence[str] | None = None) -> int:
+    arguments = create_parser().parse_args(argv)
     try:
-        frames = read_csv(filepath)
-    except FileNotFoundError:
-        print(f"Error: file not found: {filepath}", file=sys.stderr)
+        frames = read_csv(arguments.csv_file)
+        metrics = compute_metrics(frames, arguments.match_distance)
+    except (FileNotFoundError, OSError, ValueError) as error:
+        print(f"Error: {error}", file=sys.stderr)
         return 1
-    except Exception as e:
-        print(f"Error reading file: {e}", file=sys.stderr)
+    if metrics is None:
+        print("Error: need at least one pair with features in both frames", file=sys.stderr)
         return 1
-
-    if len(frames) < 2:
-        print("Error: need at least 2 frames for repeatability", file=sys.stderr)
-        return 1
-
-    metrics = compute_metrics(frames)
-    if not metrics:
-        print("Error: failed to compute metrics", file=sys.stderr)
-        return 1
-
     print_metrics(metrics)
+    if arguments.output_json:
+        Path(arguments.output_json).write_text(
+            json.dumps(asdict(metrics), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

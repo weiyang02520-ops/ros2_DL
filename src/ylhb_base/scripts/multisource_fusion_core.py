@@ -715,7 +715,7 @@ class MultisourceFusionCore:
         measurement_confidence: float = 1.0,
         correct_yaw: bool = True,
     ) -> bool:
-        if not _finite_pose(measurement) or self._map_pose is None:
+        if not _finite_pose(measurement):
             reasons.append(f"{source}_INVALID")
             return False
         last_timestamp = self._last_absolute_timestamps.get(source)
@@ -724,24 +724,34 @@ class MultisourceFusionCore:
         if last_timestamp is not None and measurement.timestamp <= last_timestamp:
             reasons.append(f"{source}_OLD_MEASUREMENT")
             return False
-        dx = measurement.x - self._map_pose.x
-        dy = measurement.y - self._map_pose.y
-        dyaw = wrap_angle(measurement.yaw - self._map_pose.yaw)
-        if self._global_anchored and (math.hypot(dx, dy) > residual_gate or abs(dyaw) > self.config.yaw_residual_gate):
-            reasons.append(f"{source}_OUTLIER")
-            return False
         confidence = _clamp(measurement_confidence)
         effective_confidence = max(self.config.adaptive_min_confidence, confidence)
         self._last_measurement_confidence = confidence
         base_position_sigma = (
             self.config.gnss_base_position_sigma
             if source == "GNSS"
+            else self.config.uwb_base_position_sigma
+            if source == "UWB"
             else self.config.lidar_base_position_sigma
         )
         self._adaptive_position_uncertainty = base_position_sigma / math.sqrt(effective_confidence)
         if correct_yaw:
             self._adaptive_yaw_uncertainty = self.config.lidar_base_yaw_sigma / math.sqrt(effective_confidence)
-        if not self._global_anchored:
+        had_map_pose = self._map_pose is not None
+        if not had_map_pose:
+            self._map_pose = Pose2D(measurement.x, measurement.y, measurement.yaw, now)
+            self._global_anchored = True
+        else:
+            dx = measurement.x - self._map_pose.x
+            dy = measurement.y - self._map_pose.y
+            dyaw = wrap_angle(measurement.yaw - self._map_pose.yaw)
+            if self._global_anchored and (
+                math.hypot(dx, dy) > residual_gate
+                or (correct_yaw and abs(dyaw) > self.config.yaw_residual_gate)
+            ):
+                reasons.append(f"{source}_OUTLIER")
+                return False
+        if had_map_pose and not self._global_anchored:
             self._map_pose = Pose2D(
                 measurement.x,
                 measurement.y,
@@ -749,7 +759,7 @@ class MultisourceFusionCore:
                 now,
             )
             self._global_anchored = True
-        else:
+        elif had_map_pose:
             distance = math.hypot(dx, dy)
             if distance > self.config.max_correction_step > 0.0:
                 scale = self.config.max_correction_step / distance

@@ -66,6 +66,7 @@ def create_node(node_name: str) -> Any:
     from geometry_msgs.msg import PoseArray
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
+    from rclpy.qos import qos_profile_sensor_data
     from sensor_msgs.msg import LaserScan
 
     class LidarRobustNode(Node):
@@ -98,7 +99,7 @@ def create_node(node_name: str) -> Any:
             self._features_pub = self.create_publisher(PoseArray, str(self.get_parameter("stable_features_topic").value), 10)
             self._quality_pub = self.create_publisher(DiagnosticArray, str(self.get_parameter("quality_topic").value), 10)
             self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
-            self.create_subscription(LaserScan, scan_topic, self._on_scan, 10)
+            self.create_subscription(LaserScan, scan_topic, self._on_scan, qos_profile_sensor_data)
             self.get_logger().info(
                 f"side-channel LiDAR robustness POC active: {scan_topic} + {odom_topic}; "
                 "existing scan consumers are not replaced"

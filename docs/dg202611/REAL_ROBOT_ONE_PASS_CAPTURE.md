@@ -9,7 +9,9 @@
 1. 机器人上层和底盘电池均有电，急停按钮可立即使用。
 2. 手机控制、UI、建图/导航和底盘单独验证正常。
 3. `/home/nvidia/ros2_DL` 保持原样，三模型位于 `/home/nvidia/dg202611_ws`。
-4. 在地面用卷尺标记起点、两个中间点和终点，记录相对坐标并拍照。
+4. 在地面用卷尺标记起点、两个中间点和终点，记录坐标并拍照。若要计算位置误差，
+   这些坐标必须与待评价位姿使用同一坐标系（默认 `map`）；只有相对距离而没有坐标系
+   对齐时，只保存轨迹，不填写绝对位置误差。
 5. 每次实验前记下场景编号；不能在看完结果后修改阈值或删除失败trial。
 
 ## 采集命令
@@ -34,8 +36,37 @@ cd /home/nvidia/dg202611_ws
 ```
 
 每个目录自动包含 `metadata.json`、`result.json`、`rosbag/`、资源采样、节点/话题/
-参数快照、CAN和手机桥接状态、日志及SHA256清单。`capture_status=COMPLETE`只表示
-采集完整，不代表性能合格。
+参数快照、CAN和手机桥接状态、日志及SHA256清单。还会生成 `structured/`：
+
+- `lidar_features.csv`：MODEL-2 每帧稳定特征二维坐标；
+- `lidar_quality.csv`：有效点、异常点、动态候选、几何质量和时间一致性；
+- `fusion_status_samples.csv`：MODEL-1 模式、接受源、置信度和坐标系；
+- `relocalization_status_samples.csv`：MODEL-3 完整状态时间线；
+- `relocalization_events.csv`：每次尝试唯一终态，可直接计算成功率和恢复时间；
+- `position_samples.csv`：仅在命令提供同坐标系卷尺真值时写入有效样本；
+- `diagnostic_samples.csv`：上述诊断消息的无损 JSON 字段备份。
+
+采集器与结构化记录节点都没有运动发布器。`capture_status=COMPLETE` 要求 rosbag 和
+结构化记录同时完整，但仍只表示采集完整，不代表性能合格。
+
+## 有卷尺真值的定点采集
+
+机器人中心停在已标定的 `map` 坐标点 `(x, y)` 后，保持静止并执行：
+
+```bash
+./scripts/run_real_robot_capture.sh \
+  --scenario EXP01_POSITION_P0 \
+  --duration 60 \
+  --ground-truth-x 0.00 \
+  --ground-truth-y 0.00 \
+  --ground-truth-frame map \
+  --estimated-pose-topic /dg/fusion/pose \
+  --hardware-notes "卷尺点P0；机器人中心对准标记；朝向按现场记录"
+```
+
+对 P1、P2、P3 分别重复一次并写入各自坐标。若不能确认卷尺坐标和 `map` 的原点、
+方向一致，就不要填 `--ground-truth-*`；原始位姿仍会进入 rosbag，后续不会被误算成
+定位精度。
 
 ## 推荐顺序
 
@@ -46,14 +77,43 @@ cd /home/nvidia/dg202611_ws
 | 3 | EXP03_LIDAR_PARTIAL | 120 s | 纸板遮挡约1/3雷达视场 | 局部遮挡检测与降级 |
 | 4 | EXP03_LIDAR_BLOCKED | 60 s | 短时遮挡大部分视场后恢复 | 拒绝与恢复滞回 |
 | 5 | EXP03_LIDAR_DYNAMIC | 120 s | 一人在机器人前方横向往返 | 动态目标与稳定特征 |
-| 6 | EXP01_ROUTE_BASELINE_R1-R3 | 每次按路线结束 | 三次相同路线，三模型关闭 | 原系统轨迹基线 |
-| 7 | EXP01_ROUTE_FUSION_R1-R3 | 每次按路线结束 | 三次相同路线，三模型旁路开启 | 融合输出对比 |
-| 8 | EXP04_INVALID_CANDIDATE | 60 s | 机器人静止，运行预先冻结的错误候选注入 | 验证错误候选拒绝 |
-| 9 | EXP04_ACTIVE_RECOVERY_R01-R20 | 每次最长60 s | 空旷区域，逐次执行冻结的定位异常场景 | 恢复成功率与时间 |
-| 10 | EXP02_ENDURANCE | 600 s | 三模型同时运行并正常使用手机/UI | 稳定性和资源裕量 |
+| 6 | EXP01_POSITION_P0-P3 | 每点60 s | 机器人中心停在同坐标系卷尺标记处 | 定点平面误差；无同坐标系真值则跳过指标 |
+| 7 | EXP01_ROUTE_BASELINE_R1-R3 | 每次按路线结束 | 三次相同路线，三模型关闭 | 原系统轨迹基线 |
+| 8 | EXP01_ROUTE_FUSION_R1-R3 | 每次按路线结束 | 三次相同路线，三模型旁路开启 | 融合输出对比 |
+| 9 | EXP04_INVALID_CANDIDATE | 60 s | 机器人静止，运行预先冻结的错误候选注入 | 验证错误候选拒绝 |
+| 10 | EXP04_ACTIVE_RECOVERY_R01-R20 | 每次最长60 s | 空旷区域，逐次执行冻结的定位异常场景 | 恢复成功率与时间 |
+| 11 | EXP02_ENDURANCE | 600 s | 三模型同时运行并正常使用手机/UI | 稳定性和资源裕量 |
 
-第8、9项涉及恢复状态和可能的旋转动作。开始前必须确认速度仲裁器所有权、周围空旷
+第9、10项涉及恢复状态和可能的旋转动作。开始前必须确认速度仲裁器所有权、周围空旷
 和急停；采集器本身不会启动这些动作。
+
+MODEL-2 重复率仅对第2～5项中机器人保持静止的区间解释。评价器按同一雷达坐标系中
+相邻帧特征的 0.12 m 一对一空间匹配计算 `R_min/R_avg/R_pool`；零特征帧单独计数，
+不会被当成 100% 重复率。路线运动中的局部雷达坐标会随车体变化，不作为该指标。
+
+## MODEL-3 错误候选负例
+
+该负例只验证“错误候选被拒绝”，不让错误候选与真实 scan-to-map 结果竞争，也不接管
+底盘。由现场人员在两个终端执行：
+
+```bash
+# 终端A：观察模式；关闭真实候选生产器和速度仲裁器
+./scripts/run_on_jetson.sh dg_integration \
+  enable_nav2:=false \
+  enable_scan_map:=false \
+  enable_cmd_vel_arbiter:=false
+
+# 终端B：仅在 MODEL-3 明确请求候选后发布一次受控错误诊断
+ros2 run ylhb_base invalid_candidate_injector_node \
+  --max-injections 1 \
+  --timeout-sec 45
+```
+
+同时以 `EXP04_INVALID_CANDIDATE` 运行采集器。现场人员需先用冻结的定位异常步骤让
+MODEL-3 进入候选请求阶段；注入器若未观察到请求会以失败退出，不会伪造成功。
+通过证据为 `/dg/relocalization/match_quality` 出现
+`CONTROLLED_INVALID_CANDIDATE`，随后 `/dg/relocalization/status` 明确记录拒绝原因；
+`/cmd_vel` 不应由该工具发布。真实恢复正例必须恢复 `enable_scan_map:=true`，并单独测试。
 
 ## UWB数据的使用
 
@@ -79,6 +139,7 @@ UWB硬件数据已经采完，不需要在上述流程中重新连接。为了�
 session=$(ls -dt results/real_robot/* | head -n 1)
 cat "$session/result.json"
 test -f "$session/rosbag/metadata.yaml"
+test -f "$session/structured/capture_summary.json"
 (cd "$session" && sha256sum -c manifest.sha256)
 ```
 
@@ -93,5 +154,13 @@ test -f "$session/rosbag/metadata.yaml"
 scp -r nvidia@<机器人当前IP>:/home/nvidia/dg202611_ws/results/real_robot "$env:USERPROFILE\Downloads\DG202611_real_robot_20260907"
 ```
 
-传回后再次校验每个session的 `manifest.sha256`，再运行位置误差、特征重复率和重定位
-评价器，生成第9章表格和图。原始rosbag、CSV和日志不做覆盖式修改。
+传回后运行统一评价入口：
+
+```powershell
+python scripts/evaluate_real_robot_sessions.py `
+  "$env:USERPROFILE\Downloads\DG202611_real_robot_20260907"
+```
+
+程序会逐个校验原始清单，在原始采集目录之外新建评价目录，汇总位置样本、MODEL-2
+重复率和 MODEL-3 终态。原始 rosbag、CSV 和日志不会被覆盖。没有同坐标系真值、没有
+有效特征或没有终态时，对应指标保持为空，不会自动填成通过。

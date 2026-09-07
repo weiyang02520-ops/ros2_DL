@@ -88,6 +88,8 @@ run_check "IMPORT_FEAT_EVAL" python3 -c "import feature_repeatability_evaluator"
 run_check "IMPORT_RELOC_EVAL" python3 -c "import relocalization_evaluator"
 run_check "IMPORT_EXP_LOGGER" python3 -c "import experiment_logger"
 run_check "IMPORT_SESSION_TOOL" python3 -c "import experiment_session_tool"
+run_check "IMPORT_CAPTURE_EVAL" python3 -c "import evaluate_real_robot_sessions"
+run_check "IMPORT_STRUCTURED_CAPTURE" python3 -c "import sys; sys.path.insert(0, '../src/ylhb_base/scripts'); import evidence_capture_node"
 
 # Final summary
 echo ""
