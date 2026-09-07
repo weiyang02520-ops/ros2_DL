@@ -7,7 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 LAUNCH = ROOT / "launch" / "dg_navigation_integration.launch.py"
+UWB_EVIDENCE_LAUNCH = ROOT / "launch" / "uwb_model1_replay_evidence.launch.py"
 CMAKE = ROOT / "CMakeLists.txt"
+REPOSITORY_ROOT = ROOT.parents[1]
 
 
 class NavigationProtocolAndLaunchTests(unittest.TestCase):
@@ -20,6 +22,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             SCRIPTS / "uwb_input.py",
             SCRIPTS / "uwb_replay_node.py",
             LAUNCH,
+            UWB_EVIDENCE_LAUNCH,
         ):
             ast.parse(path.read_text(encoding="utf-8"))
 
@@ -69,6 +72,40 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertIn('condition=IfCondition(enable_cmd_vel_arbiter)', text)
         self.assertIn('"enable_uwb_replay",', text)
         self.assertIn('DeclareLaunchArgument("uwb_alignment_enabled", default_value="false")', text)
+
+    def test_uwb_evidence_launch_is_isolated_and_marks_test_frame(self) -> None:
+        text = UWB_EVIDENCE_LAUNCH.read_text(encoding="utf-8")
+        self.assertIn('executable="uwb_replay_node"', text)
+        self.assertIn('executable="multisource_fusion_node"', text)
+        self.assertIn('"uwb_alignment_enabled": True', text)
+        self.assertIn('default_value="uwb_replay_test"', text)
+        self.assertIn('default_value="uwb_replay_tag_test"', text)
+        self.assertIn('"publish_tf": False', text)
+        self.assertNotIn("cmd_vel", text)
+        for disabled_input in (
+            "/dg/evidence/no_local_odom",
+            "/dg/evidence/no_gnss_fix",
+            "/dg/evidence/no_amcl_pose",
+            "/dg/evidence/no_scan_match_pose",
+        ):
+            self.assertIn(disabled_input, text)
+
+    def test_uwb_evidence_wrapper_has_scenarios_and_no_motion_command(self) -> None:
+        text = (REPOSITORY_ROOT / "scripts" / "run_uwb_model1_evidence.sh").read_text(
+            encoding="utf-8"
+        )
+        for scenario in ("static", "move", "anchor_fault"):
+            self.assertIn(scenario, text)
+        self.assertIn("dg_uwb_evidence", text)
+        self.assertNotIn("topic pub", text)
+        self.assertNotIn("/cmd_vel", text)
+
+    def test_fusion_wrapper_publishes_configured_output_frame(self) -> None:
+        text = (SCRIPTS / "multisource_fusion_node.py").read_text(encoding="utf-8")
+        self.assertIn('self.declare_parameter("output_frame_id", "map")', text)
+        self.assertIn("odom.header.frame_id = self._output_frame_id", text)
+        self.assertIn("odom.child_frame_id = self._output_child_frame_id", text)
+        self.assertIn('"output_frame_id": self._output_frame_id', text)
 
     def test_cmake_installs_new_wrappers_and_registers_tests(self) -> None:
         text = CMAKE.read_text(encoding="utf-8")

@@ -57,20 +57,21 @@ cd /home/nvidia/dg202611_ws
 
 ## UWB数据的使用
 
-UWB硬件数据已经采完，不需要在上述流程中重新连接。分别回放三份已封存数据：
+UWB硬件数据已经采完，不需要在上述流程中重新连接。为了明确证明 MODEL-1 消费
+真实 UWB，同时避免把未标定坐标写成地图坐标，使用独立证据入口分别回放三份数据：
 
 ```bash
-./scripts/run_dg_integration.sh \
-  enable_uwb_replay:=true \
-  uwb_replay_file:=$(ros2 pkg prefix --share ylhb_base)/data/uwb/20260905/static_raw_20260905_165208.csv
+./scripts/run_uwb_model1_evidence.sh static
 ```
 
-另外两份为 `move_raw_20260905_170425.csv` 和 `anchor_fault.csv`。每份回放时单独启动
-一次采集，场景编号分别使用 `UWB_STATIC_REPLAY`、`UWB_MOVE_REPLAY` 和
-`UWB_ANCHOR_FAULT_REPLAY`。
+另外两个参数为 `move` 和 `anchor_fault`。每份回放时单独启动一次采集，场景编号分别
+使用 `UWB_STATIC_REPLAY`、`UWB_MOVE_REPLAY` 和 `UWB_ANCHOR_FAULT_REPLAY`。
 
-如果只验证软件消费链，可保持 `uwb_alignment_enabled:=false` 并记录 UWB质量话题；
-如果要验证 MODEL-1 的 `UWB_AIDED`，必须先冻结 UWB到map的二维变换，再设置为true。
+证据入口使用明确命名的 `uwb_replay_test` 输出坐标系，禁用实时里程计、GNSS、AMCL
+和scan-match输入，不发布 TF，也没有运动输出。`/dg/fusion/status` 必须出现
+`fusion_mode=UWB_AIDED`、`accepted_source=UWB` 和
+`output_frame_id=uwb_replay_test`。这证明软件消费链，不证明 UWB 到机器人地图的现场
+对齐或定位精度。
 
 ## 每次结束后的现场检查
 

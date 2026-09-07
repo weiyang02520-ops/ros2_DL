@@ -53,6 +53,29 @@ ros2 topic echo /dg/uwb/pose --once
 ros2 topic echo /dg/fusion/status --once
 ```
 
+## 独立证明 MODEL-1 消费 UWB
+
+因为现有 UWB 数据在另一场地采集，不能把单位变换直接冒充成机器人地图对齐。仓库
+提供了一个独立的、无运动输出的证据入口：它只启动 UWB 回放和 MODEL-1 融合节点，
+屏蔽实时里程计、GNSS、AMCL和scan-match输入，并把输出坐标系明确写成
+`uwb_replay_test`。
+
+```bash
+./scripts/run_uwb_model1_evidence.sh static
+```
+
+另外两个场景为 `move` 和 `anchor_fault`。该入口不会启动速度仲裁器、不会发布 TF，
+也不发布任何运动话题。验证命令：
+
+```bash
+ros2 topic echo /dg/fusion/status | grep -m 1 -A 20 UWB_AIDED
+ros2 topic echo /dg/fusion/pose --once | grep -A 3 frame_id
+```
+
+通过标准是状态中同时出现 `fusion_mode=UWB_AIDED`、`accepted_source=UWB`、
+`output_frame_id=uwb_replay_test`。这证明真实 UWB 数据被 MODEL-1 消费，但不代表完成
+UWB 到机器人地图的现场标定，也不作为定位精度证据。
+
 ## UWB 与地图对齐
 
 UWB 坐标系和机器人 `map` 坐标系还缺一个二维刚体变换。部署时在同一参考点记录
@@ -63,7 +86,7 @@ map_x = cos(yaw) * uwb_x - sin(yaw) * uwb_y + offset_x
 map_y = sin(yaw) * uwb_x + cos(yaw) * uwb_y + offset_y
 ```
 
-完成对齐后才启用 MODEL-1 的 UWB 更新：
+完成现场对齐后，才在正式地图坐标下启用 MODEL-1 的 UWB 更新：
 
 ```bash
 ./scripts/run_dg_integration.sh \

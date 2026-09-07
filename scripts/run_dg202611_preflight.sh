@@ -65,6 +65,8 @@ run_check "MODEL2_TESTS" python3 -m pytest src/ylhb_base/test/test_lidar_robust_
 run_check "MODEL3_TESTS" python3 -m pytest src/ylhb_base/test/test_active_relocalization_core.py -v --tb=no
 run_check "HEALTH_TESTS" python3 -m pytest src/ylhb_base/test/test_navigation_health_core.py -v --tb=no
 run_check "UWB_TESTS" python3 -m pytest src/ylhb_base/test/test_uwb_model1_integration.py src/ylhb_base/test/test_uwb_model3_compatibility.py -v --tb=no
+run_check "UWB_MEASURED_EVIDENCE_TEST" python3 -m pytest src/ylhb_base/test/test_measured_uwb_analysis.py -v --tb=no
+run_check "INTEGRATION_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_navigation_protocols.py -v --tb=no
 
 # Step 4: System scenarios
 echo ""

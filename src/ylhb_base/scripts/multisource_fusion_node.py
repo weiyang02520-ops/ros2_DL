@@ -94,6 +94,8 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("fusion_odom_topic", "/dg/fusion/odom")
             self.declare_parameter("fusion_pose_topic", "/dg/fusion/pose")
             self.declare_parameter("fusion_status_topic", "/dg/fusion/status")
+            self.declare_parameter("output_frame_id", "map")
+            self.declare_parameter("output_child_frame_id", "base_footprint")
             self.declare_parameter("publish_tf", False)
             self.declare_parameter("freshness_timeout", 2.0)
             self.declare_parameter("gnss_origin_latitude", float("nan"))
@@ -126,6 +128,12 @@ def create_node(node_name: str) -> Any:
                     float(self.get_parameter("map_enu_offset_y").value),
                 )
             self._timeout = float(self.get_parameter("freshness_timeout").value)
+            self._output_frame_id = str(self.get_parameter("output_frame_id").value).strip()
+            self._output_child_frame_id = str(
+                self.get_parameter("output_child_frame_id").value
+            ).strip()
+            if not self._output_frame_id or not self._output_child_frame_id:
+                raise ValueError("output frame identifiers must not be empty")
             self._core = MultisourceFusionCore(
                 FusionConfig(
                     gnss_reference=origin,
@@ -222,7 +230,10 @@ def create_node(node_name: str) -> Any:
             self._timer = self.create_timer(float(self.get_parameter("timer_period").value), self._tick)
             if bool(self.get_parameter("publish_tf").value):
                 self.get_logger().warn("publish_tf is intentionally ignored; fusion POC never owns map->odom TF")
-            self.get_logger().info("DG multi-source fusion POC active; side-channel outputs only")
+            self.get_logger().info(
+                f"DG multi-source fusion POC active; side-channel outputs only; "
+                f"frame={self._output_frame_id}"
+            )
 
         def _now(self) -> float:
             return self.get_clock().now().nanoseconds / 1e9
@@ -522,8 +533,8 @@ def create_node(node_name: str) -> Any:
                 pose = output.map_pose
                 odom = Odometry()
                 odom.header.stamp = stamp
-                odom.header.frame_id = "map"
-                odom.child_frame_id = "base_footprint"
+                odom.header.frame_id = self._output_frame_id
+                odom.child_frame_id = self._output_child_frame_id
                 odom.pose.pose.position.x = pose.x
                 odom.pose.pose.position.y = pose.y
                 odom.pose.pose.orientation.w = math.cos(pose.yaw / 2.0)
@@ -547,6 +558,9 @@ def create_node(node_name: str) -> Any:
                 "fusion_mode": output.fusion_mode,
                 "accepted_source": output.accepted_source or "NONE",
                 "updated": output.updated,
+                "output_frame_id": self._output_frame_id,
+                "output_child_frame_id": self._output_child_frame_id,
+                "uwb_alignment_ready": self._uwb_alignment_ready,
                 "position_uncertainty": output.position_uncertainty,
                 "yaw_uncertainty": output.yaw_uncertainty,
                 "alignment_ready": self._core.alignment is not None,

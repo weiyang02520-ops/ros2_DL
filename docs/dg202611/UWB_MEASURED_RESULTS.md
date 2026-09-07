@@ -18,7 +18,7 @@
 
 > 机器人系统基于真实 UWB 测量数据完成三模型融合验证；UWB 观测通过质量门控实现接入、拒绝、降级与滞回恢复，六路逻辑接口按三个物理测量源去重。
 
-本批证据可以支持真实数据解析、三物理源到六逻辑接口映射、质量门控、异常拒绝、滞回恢复和二维估计器执行情况。后续在机器人端回放时，还需要用 `/dg/uwb/quality` 与 `/dg/fusion/status` 证明 MODEL-1 确实消费了这些观测。
+本批证据可以支持真实数据解析、三物理源到六逻辑接口映射、质量门控、异常拒绝、滞回恢复和二维估计器执行情况。机器人端使用 `run_uwb_model1_evidence.sh` 回放时，还需要用 `/dg/uwb/quality` 与 `/dg/fusion/status` 证明 MODEL-1 确实消费了这些观测；状态中应出现 `UWB_AIDED`、`accepted_source=UWB` 和 `output_frame_id=uwb_replay_test`。
 
 ## 证据边界
 
