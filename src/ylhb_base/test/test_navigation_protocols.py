@@ -181,6 +181,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertIn("*.sh text eol=lf", text)
         self.assertIn("*.py text eol=lf", text)
         self.assertIn("*.sha256 text eol=lf", text)
+        self.assertIn("LONG_RUN_TERMINAL_RECORD.md text eol=lf", text)
 
     def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")
