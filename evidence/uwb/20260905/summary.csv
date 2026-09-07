@@ -1,0 +1,4 @@
+scenario,source_file,source_sha256,frame_count,duration_s_assumed,accepted_frames,accepted_rate_percent,accept,accept_degraded,hold_for_recovery,reject,good,degraded,recovering,rejected,two_physical_source_frames,three_physical_source_frames,estimate_available_frames
+static,static_raw_20260905_165208.csv,71e37ba5646c819854c724522b4c592f47a50ddf3bbbaa288fa5d35cbacc7658,3000,120.0,2949,98.3,2949,0,30,21,2949,0,30,21,0,3000,2979
+move,move_raw_20260905_170425.csv,bad8b9cb132bc964c39e9ed30862111cae115d75c2937ad5fc73742542d9142c,3000,120.0,2870,95.66666666666667,2869,1,73,57,2869,1,73,57,0,3000,2943
+anchor_fault,anchor_fault.csv,f42972863be8fedb7a919ba5e11326712a18a0f5b2dcda9f747e968176f822fc,1000,40.0,850,85.0,850,0,4,146,850,0,4,146,143,857,854

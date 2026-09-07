@@ -206,6 +206,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_position_error_evaluator test/test_position_error_evaluator.py)
   ament_add_pytest_test(test_uwb_ros2_wrapper test/test_uwb_ros2_wrapper.py)
   ament_add_pytest_test(test_real_robot_capture test/test_real_robot_capture.py)
+  ament_add_pytest_test(test_measured_uwb_analysis test/test_measured_uwb_analysis.py)
 endif()
 
 ament_package()

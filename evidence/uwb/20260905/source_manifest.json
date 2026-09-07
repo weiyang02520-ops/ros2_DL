@@ -1,0 +1,17 @@
+{
+  "sources_opened_read_only": [
+    {
+      "path": "src/ylhb_base/data/uwb/20260905/static_raw_20260905_165208.csv",
+      "sha256": "71e37ba5646c819854c724522b4c592f47a50ddf3bbbaa288fa5d35cbacc7658"
+    },
+    {
+      "path": "src/ylhb_base/data/uwb/20260905/move_raw_20260905_170425.csv",
+      "sha256": "bad8b9cb132bc964c39e9ed30862111cae115d75c2937ad5fc73742542d9142c"
+    },
+    {
+      "path": "src/ylhb_base/data/uwb/20260905/anchor_fault.csv",
+      "sha256": "f42972863be8fedb7a919ba5e11326712a18a0f5b2dcda9f747e968176f822fc"
+    }
+  ],
+  "output_manifest": "manifest.sha256"
+}

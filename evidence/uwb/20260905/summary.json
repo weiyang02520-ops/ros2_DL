@@ -1,0 +1,388 @@
+{
+  "analysis": "measured UWB replay through production gate and estimator",
+  "replay_rate_hz_assumed": 25.0,
+  "anchor_coordinates_m": [
+    {
+      "physical_id": 0,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    {
+      "physical_id": 1,
+      "x": 2.4,
+      "y": 0.0,
+      "z": 0.0
+    },
+    {
+      "physical_id": 2,
+      "x": 1.2,
+      "y": 1.8,
+      "z": 0.0
+    }
+  ],
+  "logical_to_physical_mapping": {
+    "A0": 0,
+    "A1": 1,
+    "A2": 2,
+    "A3": 0,
+    "A4": 1,
+    "A5": 2
+  },
+  "quality_gate_config": {
+    "freshness_timeout": 0.5,
+    "min_range_m": 0.3,
+    "max_range_m": 50.0,
+    "max_range_jump_m": 2.0,
+    "max_range_rate_mps": 5.0,
+    "min_unique_physical_anchors": 3,
+    "min_geometry_score": 0.1,
+    "max_residual_rms_m": 1.0,
+    "degraded_residual_rms_m": 0.5,
+    "max_position_jump_m": 3.0,
+    "max_position_speed_mps": 3.0,
+    "max_innovation_m": 5.0,
+    "recovery_good_frames": 3,
+    "default_position_sigma": 0.5
+  },
+  "scenarios": [
+    {
+      "scenario": "static",
+      "source_file": "static_raw_20260905_165208.csv",
+      "source_sha256": "71e37ba5646c819854c724522b4c592f47a50ddf3bbbaa288fa5d35cbacc7658",
+      "frame_count": 3000,
+      "replay_rate_hz_assumed": 25.0,
+      "duration_s_assumed": 120.0,
+      "logical_slot_count": 6,
+      "physical_anchor_count": 3,
+      "decision_counts": {
+        "ACCEPT": 2949,
+        "ACCEPT_DEGRADED": 0,
+        "HOLD_FOR_RECOVERY": 30,
+        "REJECT": 21
+      },
+      "state_counts": {
+        "GOOD": 2949,
+        "DEGRADED": 0,
+        "RECOVERING": 30,
+        "REJECTED": 21
+      },
+      "accepted_frames": 2949,
+      "accepted_rate_percent": 98.3,
+      "estimate_available_frames": 2979,
+      "valid_physical_count_distribution": {
+        "3": 3000
+      },
+      "rejection_reason_classes": {
+        "IMPLIED_SPEED": 21
+      },
+      "range_statistics_m": {
+        "a2_m": {
+          "count": 3000,
+          "min": 1.59,
+          "max": 2.6,
+          "mean": 1.83473,
+          "median": 1.79,
+          "p95": 2.18,
+          "sample_stddev": 0.1683152907859853
+        },
+        "a3_m": {
+          "count": 3000,
+          "min": 0.51,
+          "max": 1.18,
+          "mean": 0.6810966666666667,
+          "median": 0.65,
+          "p95": 1.0,
+          "sample_stddev": 0.1127066912608736
+        },
+        "a4_m": {
+          "count": 3000,
+          "min": 1.74,
+          "max": 2.65,
+          "mean": 2.0019066666666667,
+          "median": 1.97,
+          "p95": 2.31,
+          "sample_stddev": 0.13922437201921078
+        }
+      },
+      "estimator_internal_consistency": {
+        "residual_rms_m": {
+          "count": 2979,
+          "min": 2.03916771334255e-06,
+          "max": 0.3263378893521487,
+          "mean": 0.07596055687489746,
+          "median": 0.051901540849318285,
+          "p95": 0.2130025956429974,
+          "sample_stddev": 0.06818437050753205
+        },
+        "confidence": {
+          "count": 2979,
+          "min": 0.2075746292194846,
+          "max": 0.24804817682034333,
+          "mean": 0.2386274812995329,
+          "median": 0.24161138187248793,
+          "p95": 0.24745590030020723,
+          "sample_stddev": 0.008456513018142214
+        }
+      },
+      "estimated_trace_bounds_m": {
+        "x": {
+          "count": 2979,
+          "min": 1.5904999999999998,
+          "max": 2.5256458333333334,
+          "mean": 1.807624370594159,
+          "median": 1.7673541666666666,
+          "p95": 2.10859375,
+          "sample_stddev": 0.15010818117400135
+        },
+        "y": {
+          "count": 2979,
+          "min": -0.9581249999999998,
+          "max": 0.4329444444444445,
+          "mean": -0.07861664055797983,
+          "median": -0.06488888888888901,
+          "p95": 0.16001111111111105,
+          "sample_stddev": 0.1785310828435624
+        }
+      },
+      "independent_ground_truth_available": false,
+      "host_timestamps_available": false,
+      "claims_supported": {
+        "measured_input_parsing": true,
+        "three_physical_to_six_logical_deduplication": true,
+        "quality_gate_behavior": true,
+        "two_dimensional_estimator_execution": true,
+        "absolute_position_accuracy": false,
+        "end_to_end_latency": false
+      }
+    },
+    {
+      "scenario": "move",
+      "source_file": "move_raw_20260905_170425.csv",
+      "source_sha256": "bad8b9cb132bc964c39e9ed30862111cae115d75c2937ad5fc73742542d9142c",
+      "frame_count": 3000,
+      "replay_rate_hz_assumed": 25.0,
+      "duration_s_assumed": 120.0,
+      "logical_slot_count": 6,
+      "physical_anchor_count": 3,
+      "decision_counts": {
+        "ACCEPT": 2869,
+        "ACCEPT_DEGRADED": 1,
+        "HOLD_FOR_RECOVERY": 73,
+        "REJECT": 57
+      },
+      "state_counts": {
+        "GOOD": 2869,
+        "DEGRADED": 1,
+        "RECOVERING": 73,
+        "REJECTED": 57
+      },
+      "accepted_frames": 2870,
+      "accepted_rate_percent": 95.66666666666667,
+      "estimate_available_frames": 2943,
+      "valid_physical_count_distribution": {
+        "3": 3000
+      },
+      "rejection_reason_classes": {
+        "IMPLIED_SPEED": 57
+      },
+      "range_statistics_m": {
+        "a2_m": {
+          "count": 3000,
+          "min": 1.65,
+          "max": 2.64,
+          "mean": 1.9095600000000001,
+          "median": 1.84,
+          "p95": 2.35,
+          "sample_stddev": 0.2014944326827271
+        },
+        "a3_m": {
+          "count": 3000,
+          "min": 0.63,
+          "max": 1.23,
+          "mean": 0.9346766666666667,
+          "median": 0.93,
+          "p95": 1.13,
+          "sample_stddev": 0.12487390955139951
+        },
+        "a4_m": {
+          "count": 3000,
+          "min": 1.78,
+          "max": 2.4,
+          "mean": 1.8914433333333334,
+          "median": 1.87,
+          "p95": 2.03,
+          "sample_stddev": 0.07583183331910856
+        }
+      },
+      "estimator_internal_consistency": {
+        "residual_rms_m": {
+          "count": 2943,
+          "min": 1.4333391636774873e-05,
+          "max": 0.5058683139461042,
+          "mean": 0.18302858206630307,
+          "median": 0.1863626765113809,
+          "p95": 0.31167872131005336,
+          "sample_stddev": 0.0825707308378266
+        },
+        "confidence": {
+          "count": 2943,
+          "min": 0.1853085092651518,
+          "max": 0.24804665203887388,
+          "mean": 0.22534845353820918,
+          "median": 0.22493494509237844,
+          "p95": 0.24227181089033542,
+          "sample_stddev": 0.01024077006284693
+        }
+      },
+      "estimated_trace_bounds_m": {
+        "x": {
+          "count": 2943,
+          "min": 1.502083333333333,
+          "max": 2.445,
+          "mean": 1.780337545305244,
+          "median": 1.7300624999999998,
+          "p95": 2.1782125,
+          "sample_stddev": 0.1816602052070251
+        },
+        "y": {
+          "count": 2943,
+          "min": -0.4726666666666668,
+          "max": 0.6153472222222225,
+          "mean": 0.13845160361686867,
+          "median": 0.12691666666666668,
+          "p95": 0.4006319444444442,
+          "sample_stddev": 0.14147016691123307
+        }
+      },
+      "independent_ground_truth_available": false,
+      "host_timestamps_available": false,
+      "claims_supported": {
+        "measured_input_parsing": true,
+        "three_physical_to_six_logical_deduplication": true,
+        "quality_gate_behavior": true,
+        "two_dimensional_estimator_execution": true,
+        "absolute_position_accuracy": false,
+        "end_to_end_latency": false
+      }
+    },
+    {
+      "scenario": "anchor_fault",
+      "source_file": "anchor_fault.csv",
+      "source_sha256": "f42972863be8fedb7a919ba5e11326712a18a0f5b2dcda9f747e968176f822fc",
+      "frame_count": 1000,
+      "replay_rate_hz_assumed": 25.0,
+      "duration_s_assumed": 40.0,
+      "logical_slot_count": 6,
+      "physical_anchor_count": 3,
+      "decision_counts": {
+        "ACCEPT": 850,
+        "ACCEPT_DEGRADED": 0,
+        "HOLD_FOR_RECOVERY": 4,
+        "REJECT": 146
+      },
+      "state_counts": {
+        "GOOD": 850,
+        "DEGRADED": 0,
+        "RECOVERING": 4,
+        "REJECTED": 146
+      },
+      "accepted_frames": 850,
+      "accepted_rate_percent": 85.0,
+      "estimate_available_frames": 854,
+      "valid_physical_count_distribution": {
+        "2": 143,
+        "3": 857
+      },
+      "rejection_reason_classes": {
+        "IMPLIED_SPEED": 3,
+        "INSUFFICIENT_ANCHORS": 143
+      },
+      "range_statistics_m": {
+        "a2_m": {
+          "count": 1000,
+          "min": 1.69,
+          "max": 2.02,
+          "mean": 1.77526,
+          "median": 1.77,
+          "p95": 1.83,
+          "sample_stddev": 0.0352388162992768
+        },
+        "a3_m": {
+          "count": 857,
+          "min": 0.65,
+          "max": 0.81,
+          "mean": 0.7751108518086347,
+          "median": 0.78,
+          "p95": 0.79,
+          "sample_stddev": 0.01480458650666704
+        },
+        "a4_m": {
+          "count": 1000,
+          "min": 1.82,
+          "max": 2.4,
+          "mean": 2.03589,
+          "median": 2.02,
+          "p95": 2.26,
+          "sample_stddev": 0.13872798331033775
+        }
+      },
+      "estimator_internal_consistency": {
+        "residual_rms_m": {
+          "count": 854,
+          "min": 0.0003611006036357732,
+          "max": 0.11334162782881468,
+          "mean": 0.051523629088022826,
+          "median": 0.053877555021271915,
+          "p95": 0.09523859488183961,
+          "sample_stddev": 0.02652928422156693
+        },
+        "confidence": {
+          "count": 854,
+          "min": 0.23399132332372552,
+          "max": 0.2480036445076654,
+          "mean": 0.24165825208197017,
+          "median": 0.24136630826625266,
+          "p95": 0.24700639041111094,
+          "sample_stddev": 0.0032902736464640826
+        }
+      },
+      "estimated_trace_bounds_m": {
+        "x": {
+          "count": 854,
+          "min": 1.6753333333333331,
+          "max": 1.794,
+          "mean": 1.7323286982825916,
+          "median": 1.7333333333333334,
+          "p95": 1.7701656250000002,
+          "sample_stddev": 0.02361593488282114
+        },
+        "y": {
+          "count": 854,
+          "min": -0.5543472222222221,
+          "max": 0.10411111111111099,
+          "mean": -0.14966858574030695,
+          "median": -0.13266666666666632,
+          "p95": 0.08633333333333332,
+          "sample_stddev": 0.16189434805300917
+        }
+      },
+      "independent_ground_truth_available": false,
+      "host_timestamps_available": false,
+      "claims_supported": {
+        "measured_input_parsing": true,
+        "three_physical_to_six_logical_deduplication": true,
+        "quality_gate_behavior": true,
+        "two_dimensional_estimator_execution": true,
+        "absolute_position_accuracy": false,
+        "end_to_end_latency": false
+      }
+    }
+  ],
+  "evidence_boundary": {
+    "independent_ground_truth_available": false,
+    "host_timestamps_available": false,
+    "absolute_position_accuracy_supported": false,
+    "end_to_end_latency_supported": false
+  }
+}
