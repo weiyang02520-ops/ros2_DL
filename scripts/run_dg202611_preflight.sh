@@ -47,7 +47,9 @@ echo ""
 echo "===STEP 1: ROS2 BUILD==="
 cd "$REPO_ROOT"
 if run_check "ROS2_BUILD" colcon build --packages-select ylhb_base --cmake-args -DBUILD_TESTING=OFF; then
+    set +u
     source install/setup.bash
+    set -u
 else
     echo "Build failed, cannot proceed with tests"
     exit 1
