@@ -53,6 +53,7 @@ run_check "IMPORT_HEALTH" python3 -c "import navigation_health_core"
 run_check "IMPORT_UWB_MODEL" python3 -c "import uwb_data_model"
 run_check "IMPORT_UWB_ESTIMATOR" python3 -c "import uwb_2d_estimator"
 run_check "IMPORT_UWB_QUALITY" python3 -c "import uwb_quality_gate"
+run_check "IMPORT_UWB_INPUT" python3 -c "import uwb_input"
 
 # Step 3: Unit tests
 echo ""
@@ -74,6 +75,7 @@ run_check "SYSTEM_SCENARIOS" python3 scripts/sys_scenarios.py
 echo ""
 echo "===STEP 5: EVALUATOR TESTS==="
 run_check "POSITION_EVALUATOR_TEST" python3 -m pytest src/ylhb_base/test/test_position_error_evaluator.py -v --tb=no
+run_check "REAL_ROBOT_CAPTURE_TEST" python3 -m pytest src/ylhb_base/test/test_real_robot_capture.py -v --tb=no
 
 # Step 6: Evaluator import checks
 echo ""
