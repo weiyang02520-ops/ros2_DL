@@ -14,6 +14,21 @@
    对齐时，只保存轨迹，不填写绝对位置误差。
 5. 每次实验前记下场景编号；不能在看完结果后修改阈值或删除失败trial。
 
+## 从 Windows 安全部署
+
+部署脚本先校验发布包 SHA256，再上传到机器人，并解压到带提交号的新目录；若目录已
+存在会拒绝覆盖。它只读取 `/home/nvidia/ros2_DL/install` 作为底层环境，不修改学长
+工作区，也不发送运动命令。电脑和机器人进入同一网络后，在 Windows PowerShell 执行：
+
+```powershell
+cd C:\Users\peng\Documents\工作区1\dg202611_robot_integration
+.\scripts\deploy_release_from_windows.ps1 -RobotHost <机器人当前IP>
+```
+
+成功标志为 `DEPLOY_READY=/home/nvidia/dg202611_ws_<提交号>`。部署目录内保存
+`deploy_preflight.log`、`DEPLOYMENT_RECORD.json` 和
+`DEPLOYED_SOURCE_MANIFEST.sha256`，现场测试前先保留这三份记录。
+
 ## 采集命令
 
 在一个独立终端运行：

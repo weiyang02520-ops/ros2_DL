@@ -11,6 +11,8 @@ UWB_EVIDENCE_LAUNCH = ROOT / "launch" / "uwb_model1_replay_evidence.launch.py"
 CMAKE = ROOT / "CMakeLists.txt"
 REPOSITORY_ROOT = ROOT.parents[1]
 DG_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_integration.sh"
+REMOTE_INSTALLER = REPOSITORY_ROOT / "scripts" / "install_release_on_robot.sh"
+WINDOWS_DEPLOYER = REPOSITORY_ROOT / "scripts" / "deploy_release_from_windows.ps1"
 
 
 class NavigationProtocolAndLaunchTests(unittest.TestCase):
@@ -150,6 +152,20 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertLess(text.index(base_source), text.index(integration_source))
         self.assertIn("dg_navigation_integration.launch.py", text)
         self.assertNotIn("topic pub", text)
+
+    def test_release_deployment_is_versioned_verified_and_motion_free(self) -> None:
+        installer = REMOTE_INSTALLER.read_text(encoding="utf-8")
+        deployer = WINDOWS_DEPLOYER.read_text(encoding="utf-8")
+        self.assertIn("sha256sum", installer)
+        self.assertIn("Refusing to overwrite existing release directory", installer)
+        self.assertIn("motion_test_executed", installer)
+        self.assertIn("run_dg202611_preflight.sh", installer)
+        self.assertIn("Get-FileHash", deployer)
+        self.assertIn("Test-NetConnection", deployer)
+        for text in (installer, deployer):
+            self.assertNotIn("/home/nvidia/ros2_DL/src", text)
+            self.assertNotIn("topic pub", text)
+            self.assertNotIn("cmd_vel", text)
 
     def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")
