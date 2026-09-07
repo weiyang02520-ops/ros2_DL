@@ -14,6 +14,7 @@ DG_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_integration.sh"
 REMOTE_INSTALLER = REPOSITORY_ROOT / "scripts" / "install_release_on_robot.sh"
 WINDOWS_DEPLOYER = REPOSITORY_ROOT / "scripts" / "deploy_release_from_windows.ps1"
 PREFLIGHT = REPOSITORY_ROOT / "scripts" / "run_dg202611_preflight.sh"
+GIT_ATTRIBUTES = REPOSITORY_ROOT / ".gitattributes"
 
 
 class NavigationProtocolAndLaunchTests(unittest.TestCase):
@@ -174,6 +175,12 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertIn("FAIL_COUNT=$((FAIL_COUNT + 1))", text)
         self.assertNotIn("((PASS_COUNT++))", text)
         self.assertNotIn("((FAIL_COUNT++))", text)
+
+    def test_release_line_endings_are_declared_for_linux_entry_points(self) -> None:
+        text = GIT_ATTRIBUTES.read_text(encoding="utf-8")
+        self.assertIn("*.sh text eol=lf", text)
+        self.assertIn("*.py text eol=lf", text)
+        self.assertIn("*.sha256 text eol=lf", text)
 
     def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")

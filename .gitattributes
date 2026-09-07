@@ -1,0 +1,6 @@
+# Runtime entry points must keep Unix line endings in Windows-built archives.
+*.sh text eol=lf
+*.py text eol=lf
+
+# Integrity lists are consumed by sha256sum on the robot.
+*.sha256 text eol=lf
