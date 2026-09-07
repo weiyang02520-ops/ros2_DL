@@ -71,7 +71,7 @@ MODEL-3: executes scan segments (+10°, -20°, +10°)
 MODEL-2: extracts stable features from each segment
 MODEL-2: publishes stable_features to /dg/lidar/stable_features
   ↓
-Scan-to-map matcher: consumes stable_features (not raw scan)
+Scan-to-map matcher: consumes /dg/lidar/filtered_scan (not raw /scan)
 Matcher: produces candidate with quality metrics
   ↓
 MODEL-3: evaluates candidate (score, inlier_ratio, mean_distance)
@@ -81,17 +81,16 @@ MODEL-3: verification passes → RECOVERED
 MODEL-3: publishes relocalization_state RECOVERED
   ↓
 MODEL-1: receives RECOVERED signal
-MODEL-1: begins progressive re-entry (does NOT immediately mark all sources GOOD)
+MODEL-1: begins staged re-entry and keeps navigation health at RECOVERING
 ```
 
 **Phase 5 (30-36s): PROGRESSIVE RE-ENTRY**
 ```
 MODEL-1: checks post-recovery health
 MODEL-1: sources now nominal (GNSS quality=4, LiDAR full FOV)
-MODEL-1: waits for N consecutive stable samples before full trust
-MODEL-1: GNSS marked GOOD (but not immediately full weight)
-MODEL-1: LiDAR marked GOOD (but not immediately full weight)
-MODEL-1: After stability confirmed → overall_state → NOMINAL
+MODEL-1: requires AMCL GOOD plus fresh odometry and scan for a continuous interval
+MODEL-1: a gap resets the interval instead of granting navigation authority
+MODEL-1: after the interval → RECOVERED once → NOMINAL
 ```
 
 ### 2.2 MODEL-2 Decision Path Validation
@@ -139,14 +138,14 @@ Then additional work needed to wire MODEL-2 output into MODEL-1 decision logic.
 
 ✅ **Layered decision (true integration):**
 - MODEL-2 geometry_score → MODEL-1 lidar_health → MODEL-1 trigger decision
-- MODEL-2 stable_features → matcher input → MODEL-3 candidate quality
+- MODEL-2 filtered_scan → matcher input → MODEL-3 candidate quality
 - Each model's output feeds next layer's decision
 
 **Validation checklist:**
 ```
 ✓ MODEL-2 geometry_score visible in MODEL-1 logs
 ✓ MODEL-1 lidar_health transitions match geometry_score changes
-✓ Matcher uses stable_features topic (not raw /scan)
+✓ Matcher uses /dg/lidar/filtered_scan (not raw /scan)
 ✓ MODEL-3 candidate quality reflects stable feature input
 ✓ All three models' decisions visible in timeline
 ```
@@ -211,8 +210,8 @@ grep "lidar_health" logs/model1_node.log
 
 ### 4.2 MODEL-2 → MODEL-3 Link (via Matcher)
 ```bash
-# Verify matcher subscribed to stable_features:
-ros2 topic info /dg/lidar/stable_features
+# Verify matcher subscribed to the filtered scan:
+ros2 topic info /dg/lidar/filtered_scan
 
 # Verify candidate quality reflects stable input:
 grep "candidate" logs/model3_node.log | grep "score"
@@ -222,7 +221,7 @@ grep "candidate" logs/model3_node.log | grep "score"
 ```
 
 **Expected:**
-- Matcher subscribes to `/dg/lidar/stable_features` (not raw `/scan`)
+- Matcher subscribes to `/dg/lidar/filtered_scan` (not raw `/scan`)
 - Candidate quality metrics reflect stable feature input
 
 ### 4.3 Three-Way Decision Timeline
@@ -253,10 +252,10 @@ THREE_MODEL_INTEGRATION: PARTIAL
 REMEDIATION_REQUIRED: Wire MODEL-2 output into MODEL-1 health logic
 ```
 
-**If stable_features not consumed by matcher:**
+**If filtered_scan is not consumed by matcher:**
 ```
 MODEL2_DECISION_PATH: DIAGNOSTIC_ONLY
-REMEDIATION_REQUIRED: Configure matcher to subscribe stable_features
+REMEDIATION_REQUIRED: Configure matcher to subscribe /dg/lidar/filtered_scan
 ```
 
 ## 6. Comparison with S05-S08

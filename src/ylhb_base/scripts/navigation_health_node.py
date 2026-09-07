@@ -75,6 +75,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("freshness_timeout", 1.0)
             self.declare_parameter("max_amcl_covariance", 0.5)
             self.declare_parameter("min_lidar_quality", 0.2)
+            self.declare_parameter("post_recovery_stable_sec", 1.0)
             # An empty list is inferred as BYTE_ARRAY by rclpy on Humble;
             # use a blank string sentinel for the intended string array.
             self.declare_parameter("required_signals", [""])
@@ -87,6 +88,9 @@ def create_node(node_name: str) -> Any:
                 max_amcl_covariance=float(self.get_parameter("max_amcl_covariance").value),
                 freshness_timeout=self._timeout,
                 min_lidar_quality=self._min_lidar_quality,
+                post_recovery_stable_sec=float(
+                    self.get_parameter("post_recovery_stable_sec").value
+                ),
             )
             self._now_value = self._now()
             self._gnss_state: str | None = None
@@ -253,6 +257,9 @@ def create_node(node_name: str) -> Any:
                 "relocalization_state": output.relocalization_state,
                 "uwb_state": output.uwb_state,
                 "overall_state": output.overall_state,
+                "post_recovery_elapsed": output.post_recovery_elapsed,
+                "post_recovery_required": output.post_recovery_required,
+                "post_recovery_complete": output.post_recovery_complete,
                 "reasons": ";".join(output.reasons),
                 "timestamp": output.timestamp,
             }

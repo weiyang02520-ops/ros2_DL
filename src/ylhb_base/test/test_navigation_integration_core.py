@@ -132,12 +132,46 @@ class NavigationIntegrationCoreTests(unittest.TestCase):
         self.assertFalse(aggregator.evaluate(health(now=0.1)).transition)
 
     def test_nominal_suspect_recovering_candidate_recovered_sequence(self) -> None:
-        aggregator = NavigationHealthAggregator()
+        aggregator = NavigationHealthAggregator(post_recovery_stable_sec=1.0)
         self.assertEqual(aggregator.evaluate(health(relocalization_state="NORMAL")).overall_state, "NOMINAL")
         self.assertEqual(aggregator.evaluate(health(relocalization_state="SUSPECTED")).overall_state, "LOCALIZATION_SUSPECT")
         self.assertEqual(aggregator.evaluate(health(relocalization_state="ACTIVE_SCAN")).overall_state, "RECOVERING")
         self.assertEqual(aggregator.evaluate(health(relocalization_state="VERIFYING")).overall_state, "RECOVERING")
-        self.assertEqual(aggregator.evaluate(health(relocalization_state="RECOVERED")).overall_state, "RECOVERED")
+        self.assertEqual(aggregator.evaluate(health(now=1.0, relocalization_state="RECOVERED")).overall_state, "RECOVERING")
+        self.assertEqual(aggregator.evaluate(health(now=2.0, relocalization_state="RECOVERED")).overall_state, "RECOVERED")
+        self.assertEqual(aggregator.evaluate(health(now=2.1, relocalization_state="RECOVERED")).overall_state, "NOMINAL")
+
+    def test_progressive_reentry_holds_recovery_then_releases_navigation(self) -> None:
+        aggregator = NavigationHealthAggregator(post_recovery_stable_sec=1.0)
+        arbiter = CmdVelArbiter(ArbiterConfig(switch_guard_duration=0.2))
+
+        for now in (0.0, 0.5):
+            state = aggregator.evaluate(
+                health(now=now, relocalization_state="RECOVERED")
+            ).overall_state
+            output = arbiter.process(
+                ArbiterInput(now, NAV_COMMAND, now, TwistCommand(), now, state)
+            )
+            self.assertNotEqual(output.command, NAV_COMMAND)
+
+        recovered = aggregator.evaluate(
+            health(now=1.0, relocalization_state="RECOVERED")
+        ).overall_state
+        switched = arbiter.process(
+            ArbiterInput(1.0, NAV_COMMAND, 1.0, TwistCommand(), 1.0, recovered)
+        )
+        self.assertEqual(recovered, "RECOVERED")
+        self.assertTrue(switched.guard_active)
+        self.assertEqual(switched.command, TwistCommand())
+
+        nominal = aggregator.evaluate(
+            health(now=1.3, relocalization_state="RECOVERED")
+        ).overall_state
+        forwarded = arbiter.process(
+            ArbiterInput(1.3, NAV_COMMAND, 1.3, TwistCommand(), 1.3, nominal)
+        )
+        self.assertEqual(nominal, "NOMINAL")
+        self.assertEqual(forwarded.command, NAV_COMMAND)
 
     def test_localization_suspect_is_zero_at_integration_boundary(self) -> None:
         output = CmdVelArbiter(ArbiterConfig(switch_guard_duration=0.0)).process(

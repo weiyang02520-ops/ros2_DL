@@ -46,6 +46,7 @@ def generate_launch_description():
     uwb_to_map_offset_x = LaunchConfiguration("uwb_to_map_offset_x")
     uwb_to_map_offset_y = LaunchConfiguration("uwb_to_map_offset_y")
     required_signals = LaunchConfiguration("required_signals")
+    post_recovery_stable_sec = LaunchConfiguration("post_recovery_stable_sec")
     cmd_vel_output_topic = LaunchConfiguration("cmd_vel_output_topic")
     gnss_origin_latitude = LaunchConfiguration("gnss_origin_latitude")
     gnss_origin_longitude = LaunchConfiguration("gnss_origin_longitude")
@@ -152,6 +153,9 @@ def generate_launch_description():
                 "required_signals": required_signals,
                 "uwb_quality_topic": "/dg/uwb/quality",
                 "status_topic": "/dg/navigation/status",
+                "post_recovery_stable_sec": ParameterValue(
+                    post_recovery_stable_sec, value_type=float
+                ),
             }
         ],
     )
@@ -254,6 +258,11 @@ def generate_launch_description():
                 "required_signals",
                 default_value="['']",
                 description="Optional required health signals, for example ['lidar']",
+            ),
+            DeclareLaunchArgument(
+                "post_recovery_stable_sec",
+                default_value="1.0",
+                description="Continuous healthy time before recovery hands control back to navigation",
             ),
             DeclareLaunchArgument(
                 "cmd_vel_output_topic",

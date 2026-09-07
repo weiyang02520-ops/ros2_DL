@@ -4,7 +4,7 @@
 INTEGRATION_STATUS:   VALIDATED (S05-S08)
 INTERFACE_LOCATION:   ROS2 topics, state machines
 VALIDATION:           SYNTHETIC
-REAL_HARDWARE:        NOT_YET_INTEGRATED
+REAL_HARDWARE:        ROBOT_DEPLOYMENT_PENDING
 ```
 
 ## 1. Overview
@@ -22,8 +22,8 @@ to minimize coupling while maintaining coherent system behavior.
 │                          MODEL-1                                │
 │         Multi-Source Fusion + Health Monitoring                 │
 │                                                                 │
-│  Inputs:  /gps/fix, /scan, /odom, /amcl_pose, /imu             │
-│  Outputs: /dg/navigation/status                                 │
+│  Inputs:  /odom, accepted GNSS, /amcl_pose, scan match, UWB    │
+│  Outputs: /dg/fusion/* and /dg/navigation/status               │
 │           overall_state, source_health[], reasons[]             │
 └────────────────────┬────────────────────────────────────────────┘
                      │
@@ -34,23 +34,24 @@ to minimize coupling while maintaining coherent system behavior.
 │         LiDAR Stable Feature Extraction                         │
 │                                                                 │
 │  Inputs:  /scan                                                 │
-│  Outputs: /dg/lidar/stable_features                             │
+│  Outputs: /dg/lidar/filtered_scan                               │
+│           /dg/lidar/stable_features                             │
 │           /dg/lidar/quality (geometry_score)                    │
 │                                                                 │
 │  ← feeds geometry_score to MODEL-1 health assessment            │
-│  ← provides stable features to scan-to-map matcher              │
+│  ← provides filtered scan to the scan-to-map matcher            │
 └─────────────────────────────────────────────────────────────────┘
                      │
-                     │ stable features
+                     │ filtered scan and quality
                      ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                          MODEL-3                                │
 │         Active Relocalization Supervisor                        │
 │                                                                 │
 │  Inputs:  MODEL-1 health (amcl_covariance, source_health)      │
-│           MODEL-2 stable features (via scan matcher)            │
+│           MODEL-2 filtered scan (via scan matcher)              │
 │  Outputs: /dg/relocalization/status                             │
-│           /dg/relocalization/cmd_vel (active motion commands)   │
+│           /cmd_vel_recovery (isolated recovery commands)        │
 │                                                                 │
 │  Trigger: sustained poor health from MODEL-1                    │
 │  Action:  scan segments to gather new evidence                  │
@@ -65,8 +66,8 @@ to minimize coupling while maintaining coherent system behavior.
 │                                                                 │
 │  ← receives RECOVERED signal from MODEL-3                       │
 │  → checks post-recovery health                                  │
-│  → gradually re-enables sources (not immediate full trust)      │
-│  → returns to NOMINAL only when stable                          │
+│  → holds RECOVERING for a continuous healthy interval           │
+│  → emits RECOVERED once, then returns to NOMINAL                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -113,14 +114,16 @@ if geometry_score < min_lidar_quality (0.2):
 
 #### MODEL-2 → MODEL-3 (via scan matcher)
 
-**Indirect:** MODEL-2 publishes stable features, scan-to-map matcher consumes them,
-produces candidates, MODEL-3 evaluates candidates.
+**Indirect:** MODEL-2 publishes a filtered `LaserScan`; the scan-to-map matcher
+consumes that scan, produces candidates, and MODEL-3 evaluates the candidates.
+`/dg/lidar/stable_features` is a `PoseArray` used for feature evidence and
+repeatability analysis; it is not the matcher's scan input.
 
 **Flow:**
 ```
-MODEL-2: /dg/lidar/stable_features (PointCloud2)
+MODEL-2: /dg/lidar/filtered_scan (LaserScan)
   ↓
-Scan Matcher: /dg/scan_map_match/pose + quality
+Scan Matcher: /scan_match_pose + /dg/relocalization/match_quality
   ↓
 MODEL-3: candidate evaluation and verification
 ```
@@ -141,10 +144,11 @@ timestamp: float
 **Used by MODEL-1:**
 ```python
 if relocalization_state == "RECOVERED":
-    # progressive re-entry, not immediate NOMINAL
-    check_post_recovery_health()
-    if stable_for_N_samples:
-        overall_state = NOMINAL
+    # staged re-entry, not immediate navigation authority
+    if amcl_good and odom_fresh and scan_fresh:
+        hold_recovering_for(post_recovery_stable_sec)
+        emit_once("RECOVERED")
+        overall_state = "NOMINAL"
 ```
 
 ## 3. Integration Scenarios

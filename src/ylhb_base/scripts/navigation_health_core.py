@@ -68,6 +68,9 @@ class NavigationHealthOutput:
     scan_match_state: str
     relocalization_state: str
     uwb_state: str
+    post_recovery_elapsed: float
+    post_recovery_required: float
+    post_recovery_complete: bool
     reasons: tuple[str, ...]
     timestamp: float
     transition: bool
@@ -167,13 +170,19 @@ class NavigationHealthAggregator:
         max_amcl_covariance: float = 0.5,
         freshness_timeout: float = 1.0,
         min_lidar_quality: float = 0.2,
+        post_recovery_stable_sec: float = 1.0,
     ) -> None:
         self.max_amcl_covariance = max_amcl_covariance
         self.freshness_timeout = freshness_timeout
         if min_lidar_quality < 0.0:
             raise ValueError("min_lidar_quality must be non-negative")
+        if post_recovery_stable_sec < 0.0:
+            raise ValueError("post_recovery_stable_sec must be non-negative")
         self.min_lidar_quality = min_lidar_quality
+        self.post_recovery_stable_sec = post_recovery_stable_sec
         self._last_overall_state: str | None = None
+        self._post_recovery_started_at: float | None = None
+        self._post_recovery_announced = False
 
     def evaluate(self, event: NavigationHealthInput) -> NavigationHealthOutput:
         gnss = normalize_signal_state(event.gnss_state, event.gnss_fresh)
@@ -187,7 +196,11 @@ class NavigationHealthAggregator:
             else self._relocalization_state(event.relocalization_state)
         )
         reasons: list[str] = []
-        required = set(event.required_signals)
+        required = {
+            str(name).strip().lower()
+            for name in event.required_signals
+            if str(name).strip()
+        }
         for name, state in (("GNSS", gnss), ("LIDAR", lidar), ("SCAN_MATCH", scan_match), ("UWB", uwb)):
             if state in {DEGRADED, REJECTED, STALE}:
                 reasons.append(f"{name}_{state}")
@@ -204,21 +217,61 @@ class NavigationHealthAggregator:
         if relocalization == STALE:
             reasons.append("RELOCALIZATION_STALE")
 
+        required_states = {
+            "gnss": gnss,
+            "lidar": lidar,
+            "scan_match": scan_match,
+            "uwb": uwb,
+            "amcl": amcl,
+        }
+        localization_unhealthy = (
+            relocalization in {LOCALIZATION_SUSPECT, STALE}
+            or amcl in {REJECTED, STALE}
+            or any(
+                state == STALE and name in required
+                for name, state in required_states.items()
+            )
+        )
+        post_recovery_elapsed = 0.0
+        post_recovery_complete = False
+        if relocalization != RECOVERED:
+            self._reset_post_recovery()
+
         if relocalization == MANUAL_REQUIRED:
             overall = MANUAL_REQUIRED
         elif relocalization == FAILED:
             overall = FAILED
         elif relocalization == RECOVERING:
             overall = RECOVERING
-        elif (
-            relocalization == LOCALIZATION_SUSPECT
-            or relocalization == STALE
-            or amcl in {REJECTED, STALE}
-            or any(state == STALE and name.lower() in required for name, state in (("GNSS", gnss), ("LIDAR", lidar), ("SCAN_MATCH", scan_match)))
-        ):
+        elif localization_unhealthy:
+            self._reset_post_recovery()
             overall = LOCALIZATION_SUSPECT
         elif relocalization == RECOVERED:
-            overall = RECOVERED
+            ready = (
+                amcl == GOOD
+                and event.odom_fresh is True
+                and event.scan_fresh is True
+                and all(required_states.get(name, UNKNOWN) == GOOD for name in required)
+            )
+            if not ready:
+                self._reset_post_recovery()
+                reasons.append("POST_RECOVERY_HEALTH_PENDING")
+                overall = RECOVERING
+            else:
+                if self._post_recovery_started_at is None or event.now < self._post_recovery_started_at:
+                    self._post_recovery_started_at = event.now
+                    self._post_recovery_announced = False
+                post_recovery_elapsed = max(0.0, event.now - self._post_recovery_started_at)
+                if not self._post_recovery_announced and post_recovery_elapsed < self.post_recovery_stable_sec:
+                    reasons.append("POST_RECOVERY_STABILIZING")
+                    overall = RECOVERING
+                elif not self._post_recovery_announced:
+                    self._post_recovery_announced = True
+                    post_recovery_complete = True
+                    overall = RECOVERED
+                else:
+                    post_recovery_complete = True
+                    overall = DEGRADED if reasons else NOMINAL
         elif reasons:
             overall = DEGRADED
         else:
@@ -241,6 +294,9 @@ class NavigationHealthAggregator:
             scan_match_state=scan_match,
             relocalization_state=relocalization,
             uwb_state=uwb,
+            post_recovery_elapsed=post_recovery_elapsed,
+            post_recovery_required=self.post_recovery_stable_sec,
+            post_recovery_complete=post_recovery_complete,
             reasons=tuple(reasons),
             timestamp=event.now,
             transition=transition,
@@ -248,6 +304,10 @@ class NavigationHealthAggregator:
             transition_message=transition_message,
             transition_level=transition_level,
         )
+
+    def _reset_post_recovery(self) -> None:
+        self._post_recovery_started_at = None
+        self._post_recovery_announced = False
 
     def _amcl_state(self, event: NavigationHealthInput) -> str:
         if event.amcl_fresh is False:

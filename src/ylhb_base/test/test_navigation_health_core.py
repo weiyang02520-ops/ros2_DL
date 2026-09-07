@@ -74,9 +74,46 @@ class NavigationHealthCoreTests(unittest.TestCase):
             output = NavigationHealthAggregator().evaluate(event(relocalization_state=state))
             self.assertEqual(output.overall_state, RECOVERING, state)
 
-    def test_recovered_state_is_exposed(self) -> None:
-        output = NavigationHealthAggregator().evaluate(event(relocalization_state="RECOVERED"))
-        self.assertEqual(output.overall_state, RECOVERED)
+    def test_recovery_waits_for_continuous_health_before_handoff(self) -> None:
+        aggregator = NavigationHealthAggregator(post_recovery_stable_sec=1.0)
+        first = aggregator.evaluate(event(now=10.0, relocalization_state="RECOVERED"))
+        middle = aggregator.evaluate(event(now=10.5, relocalization_state="RECOVERED"))
+        handoff = aggregator.evaluate(event(now=11.0, relocalization_state="RECOVERED"))
+        nominal = aggregator.evaluate(event(now=11.1, relocalization_state="RECOVERED"))
+
+        self.assertEqual(first.overall_state, RECOVERING)
+        self.assertEqual(middle.overall_state, RECOVERING)
+        self.assertIn("POST_RECOVERY_STABILIZING", middle.reasons)
+        self.assertEqual(handoff.overall_state, RECOVERED)
+        self.assertTrue(handoff.post_recovery_complete)
+        self.assertEqual(nominal.overall_state, NOMINAL)
+
+    def test_recovery_health_gap_restarts_stability_timer(self) -> None:
+        aggregator = NavigationHealthAggregator(post_recovery_stable_sec=1.0)
+        aggregator.evaluate(event(now=0.0, relocalization_state="RECOVERED"))
+        aggregator.evaluate(event(now=0.8, relocalization_state="RECOVERED"))
+        pending = aggregator.evaluate(
+            event(now=1.0, relocalization_state="RECOVERED", scan_fresh=None)
+        )
+        restarted = aggregator.evaluate(event(now=1.1, relocalization_state="RECOVERED"))
+        handoff = aggregator.evaluate(event(now=2.1, relocalization_state="RECOVERED"))
+
+        self.assertEqual(pending.overall_state, RECOVERING)
+        self.assertIn("POST_RECOVERY_HEALTH_PENDING", pending.reasons)
+        self.assertEqual(restarted.post_recovery_elapsed, 0.0)
+        self.assertEqual(handoff.overall_state, RECOVERED)
+
+    def test_required_stale_uwb_blocks_recovery_handoff(self) -> None:
+        output = NavigationHealthAggregator().evaluate(
+            event(
+                relocalization_state="RECOVERED",
+                uwb_state="GOOD",
+                uwb_fresh=False,
+                required_signals=("uwb",),
+            )
+        )
+        self.assertEqual(output.overall_state, LOCALIZATION_SUSPECT)
+        self.assertIn("UWB_REQUIRED_STALE", output.reasons)
 
     def test_failed_and_manual_states_have_priority(self) -> None:
         aggregator = NavigationHealthAggregator()
