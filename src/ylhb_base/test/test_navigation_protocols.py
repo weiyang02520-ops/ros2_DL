@@ -13,6 +13,7 @@ REPOSITORY_ROOT = ROOT.parents[1]
 DG_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_integration.sh"
 REMOTE_INSTALLER = REPOSITORY_ROOT / "scripts" / "install_release_on_robot.sh"
 WINDOWS_DEPLOYER = REPOSITORY_ROOT / "scripts" / "deploy_release_from_windows.ps1"
+PREFLIGHT = REPOSITORY_ROOT / "scripts" / "run_dg202611_preflight.sh"
 
 
 class NavigationProtocolAndLaunchTests(unittest.TestCase):
@@ -166,6 +167,13 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
             self.assertNotIn("/home/nvidia/ros2_DL/src", text)
             self.assertNotIn("topic pub", text)
             self.assertNotIn("cmd_vel", text)
+
+    def test_preflight_counter_does_not_trip_errexit_after_first_pass(self) -> None:
+        text = PREFLIGHT.read_text(encoding="utf-8")
+        self.assertIn("PASS_COUNT=$((PASS_COUNT + 1))", text)
+        self.assertIn("FAIL_COUNT=$((FAIL_COUNT + 1))", text)
+        self.assertNotIn("((PASS_COUNT++))", text)
+        self.assertNotIn("((FAIL_COUNT++))", text)
 
     def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")

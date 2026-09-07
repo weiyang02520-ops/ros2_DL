@@ -33,11 +33,11 @@ run_check() {
     echo "[$name] Running..."
     if "$@"; then
         echo "[$name] PASS"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
         return 0
     else
         echo "[$name] FAIL"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
         return 1
     fi
 }
