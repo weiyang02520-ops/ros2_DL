@@ -236,7 +236,7 @@ def test_publish_velocity_allows_new_default_speed_limits(monkeypatch):
     bridge.publish_velocity(0.30, 0.55, 300)
 
     msg = bridge._cmd_pub.messages[-1]
-    assert msg.linear.x == pytest.approx(-0.30)
+    assert msg.linear.x == pytest.approx(0.30)
     assert msg.angular.z == pytest.approx(0.55)
 
 
@@ -253,7 +253,7 @@ def test_publish_velocity_clamps_requests_to_configured_limits(monkeypatch):
     bridge.publish_velocity(0.30, -0.55, 300)
 
     msg = bridge._cmd_pub.messages[-1]
-    assert msg.linear.x == pytest.approx(-0.20)
+    assert msg.linear.x == pytest.approx(0.20)
     assert msg.angular.z == pytest.approx(-0.40)
 
 

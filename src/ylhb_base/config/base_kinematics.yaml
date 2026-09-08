@@ -10,6 +10,8 @@ zlac8015d_canopen_controller:
     max_angular_speed: 0.70
     # 驱动器低 16 位通道连接左轮，高 16 位通道连接右轮。
     low_channel_is_left: true
+    # 实车纵向轴与驱动器约定相反；同时校正速度命令和里程计反馈，角速度方向保持不变。
+    linear_axis_direction: -1.0
     # 通道极性：逻辑轮正向转速转换为驱动器通道命令时的方向系数，只允许 1.0 或 -1.0。
     low_channel_direction: 1.0
     # 通道极性：逻辑轮正向转速转换为驱动器通道命令时的方向系数，只允许 1.0 或 -1.0。
