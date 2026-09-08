@@ -26,6 +26,7 @@ from active_relocalization_core import (  # noqa: E402
     LocalizationHealth,
     SupervisorInput,
 )
+from pose_freshness import motion_aware_pose_fresh  # noqa: E402
 
 
 def _stamp_to_seconds(stamp: Any) -> float | None:
@@ -154,10 +155,12 @@ def create_node(node_name: str) -> Any:
             self._scan_sequence = 0
             self._consumed_scan_sequence = 0
             self._odom_received_at: float | None = None
+            self._odom_pose: tuple[float, float, float] | None = None
             self._odom_yaw: float | None = None
             self._odom_linear = 0.0
             self._odom_angular = 0.0
             self._amcl_received_at: float | None = None
+            self._amcl_reference_odom_pose: tuple[float, float, float] | None = None
             self._amcl_covariance: float | None = None
             self._amcl_pose: tuple[float, float, float] | None = None
             self._lidar_quality: float | None = None
@@ -252,6 +255,8 @@ def create_node(node_name: str) -> Any:
                 "min_scan_match_inlier_ratio": 0.45,
                 "max_scan_match_mean_distance": 0.30,
                 "signal_timeout": 1.0,
+                "amcl_motion_translation_tolerance": 0.03,
+                "amcl_motion_rotation_tolerance": 0.03,
                 "stop_velocity": 0.03,
                 "angular_speed": 0.18,
                 "yaw_tolerance": math.radians(1.5),
@@ -316,14 +321,20 @@ def create_node(node_name: str) -> Any:
             self._odom_received_at = self._now()
             self._odom_yaw = _quaternion_yaw(message.pose.pose.orientation)
             try:
+                position = message.pose.pose.position
                 self._odom_linear = float(message.twist.twist.linear.x)
                 self._odom_angular = float(message.twist.twist.angular.z)
+                if self._odom_yaw is not None:
+                    self._odom_pose = (float(position.x), float(position.y), self._odom_yaw)
             except (AttributeError, TypeError, ValueError):
                 self._odom_linear = float("nan")
                 self._odom_angular = float("nan")
+            if self._amcl_received_at is not None and self._amcl_reference_odom_pose is None:
+                self._amcl_reference_odom_pose = self._odom_pose
 
         def _on_amcl_pose(self, message: Any) -> None:
             self._amcl_received_at = self._now()
+            self._amcl_reference_odom_pose = self._odom_pose
             try:
                 self._amcl_covariance = float(message.pose.covariance[0])
                 pose = message.pose.pose
@@ -397,7 +408,7 @@ def create_node(node_name: str) -> Any:
                 scan_match_mean_distance=self._scan_match_mean_distance,
                 scan_fresh=self._fresh(self._scan_received_at, now),
                 odom_fresh=self._fresh(self._odom_received_at, now),
-                amcl_fresh=self._fresh(self._amcl_received_at, now),
+                amcl_fresh=self._amcl_fresh(now),
                 lidar_fresh=self._fresh(self._lidar_health_received_at, now),
                 gnss_fresh=self._fresh(self._gnss_health_received_at, now),
                 scan_match_fresh=self._fresh(self._match_quality_received_at, now),
@@ -406,6 +417,15 @@ def create_node(node_name: str) -> Any:
                 pose_x=None if pose is None else pose[0],
                 pose_y=None if pose is None else pose[1],
                 pose_yaw=None if pose is None else pose[2],
+            )
+
+        def _amcl_fresh(self, now: float) -> bool | None:
+            return motion_aware_pose_fresh(
+                self._fresh(self._amcl_received_at, now),
+                self._amcl_reference_odom_pose,
+                self._odom_pose,
+                float(self.get_parameter("amcl_motion_translation_tolerance").value),
+                float(self.get_parameter("amcl_motion_rotation_tolerance").value),
             )
 
         def _tick(self) -> None:

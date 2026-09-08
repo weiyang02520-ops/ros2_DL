@@ -18,6 +18,7 @@ from navigation_health_core import (  # noqa: E402
     NavigationHealthInput,
     parse_signal_diagnostic,
 )
+from pose_freshness import motion_aware_pose_fresh  # noqa: E402
 from diagnostic_level import normalize_diagnostic_level  # noqa: E402
 
 
@@ -73,6 +74,8 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("scan_topic", "/scan")
             self.declare_parameter("status_topic", "/dg/navigation/status")
             self.declare_parameter("freshness_timeout", 1.0)
+            self.declare_parameter("amcl_motion_translation_tolerance", 0.03)
+            self.declare_parameter("amcl_motion_rotation_tolerance", 0.03)
             self.declare_parameter("max_amcl_covariance", 0.5)
             self.declare_parameter("min_lidar_quality", 0.2)
             self.declare_parameter("post_recovery_stable_sec", 1.0)
@@ -104,8 +107,10 @@ def create_node(node_name: str) -> Any:
             self._relocalization_state: str | None = None
             self._relocalization_received_at: float | None = None
             self._amcl_received_at: float | None = None
+            self._amcl_reference_odom_pose: tuple[float, float, float] | None = None
             self._amcl_covariance: float | None = None
             self._odom_received_at: float | None = None
+            self._odom_pose: tuple[float, float, float] | None = None
             self._scan_received_at: float | None = None
 
             self._status_pub = self.create_publisher(
@@ -199,13 +204,22 @@ def create_node(node_name: str) -> Any:
 
         def _on_amcl(self, message: Any) -> None:
             self._amcl_received_at = self._now()
+            self._amcl_reference_odom_pose = self._odom_pose
             try:
                 self._amcl_covariance = _float_or_none(message.pose.covariance[0])
             except (AttributeError, IndexError, TypeError, ValueError):
                 self._amcl_covariance = None
 
-        def _on_odom(self, _message: Any) -> None:
+        def _on_odom(self, message: Any) -> None:
             self._odom_received_at = self._now()
+            try:
+                pose = message.pose.pose
+                yaw = _yaw_from_quaternion(pose.orientation)
+                self._odom_pose = (float(pose.position.x), float(pose.position.y), yaw) if yaw is not None else None
+            except (AttributeError, TypeError, ValueError):
+                self._odom_pose = None
+            if self._amcl_received_at is not None and self._amcl_reference_odom_pose is None:
+                self._amcl_reference_odom_pose = self._odom_pose
 
         def _on_scan(self, _message: Any) -> None:
             self._scan_received_at = self._now()
@@ -220,7 +234,7 @@ def create_node(node_name: str) -> Any:
                     lidar_state=self._lidar_state,
                     lidar_fresh=self._fresh(self._lidar_received_at, now),
                     amcl_covariance=self._amcl_covariance,
-                    amcl_fresh=self._fresh(self._amcl_received_at, now),
+                    amcl_fresh=self._amcl_fresh(now),
                     odom_fresh=self._fresh(self._odom_received_at, now),
                     scan_fresh=self._fresh(self._scan_received_at, now),
                     scan_match_state=self._scan_match_state,
@@ -241,6 +255,15 @@ def create_node(node_name: str) -> Any:
                 else:
                     logger.info(output.transition_message)
             self._publish(output)
+
+        def _amcl_fresh(self, now: float) -> bool | None:
+            return motion_aware_pose_fresh(
+                self._fresh(self._amcl_received_at, now),
+                self._amcl_reference_odom_pose,
+                self._odom_pose,
+                float(self.get_parameter("amcl_motion_translation_tolerance").value),
+                float(self.get_parameter("amcl_motion_rotation_tolerance").value),
+            )
 
         def _publish(self, output: Any) -> None:
             message = DiagnosticArray()

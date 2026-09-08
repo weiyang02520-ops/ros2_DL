@@ -22,6 +22,7 @@ from navigation_health_core import (  # noqa: E402
     NavigationHealthInput,
     parse_signal_diagnostic,
 )
+from pose_freshness import motion_aware_pose_fresh  # noqa: E402
 
 
 def event(**changes: object) -> NavigationHealthInput:
@@ -44,6 +45,14 @@ def event(**changes: object) -> NavigationHealthInput:
 
 
 class NavigationHealthCoreTests(unittest.TestCase):
+    def test_stale_amcl_remains_fresh_when_stationary(self) -> None:
+        self.assertTrue(
+            motion_aware_pose_fresh(False, (1.0, 2.0, 3.13), (1.01, 2.0, -3.13), 0.03, 0.03)
+        )
+        self.assertFalse(
+            motion_aware_pose_fresh(False, (1.0, 2.0, 0.0), (1.05, 2.0, 0.0), 0.03, 0.03)
+        )
+        self.assertIsNone(motion_aware_pose_fresh(None, None, None, 0.03, 0.03))
     def test_all_healthy_is_nominal(self) -> None:
         output = NavigationHealthAggregator().evaluate(event())
         self.assertEqual(output.overall_state, NOMINAL)
