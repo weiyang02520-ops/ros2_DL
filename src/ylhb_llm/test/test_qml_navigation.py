@@ -518,7 +518,7 @@ def test_route_preview_viewer_has_zoom_pan_and_error_controls():
 def test_patrol_page_sends_controls_to_supervisor():
     qml = Path("src/ylhb_llm/qml/pages/PatrolPage.qml").read_text(encoding="utf-8")
 
-    assert 'backend.startPatrolMode()' not in qml
+    assert qml.count('backend.startPatrolMode()') == 1
     assert 'backend.confirmPlatformPatrolStart()' in qml
     assert 'backend.sendSystemCommand("pause_patrol")' in qml
     assert 'backend.sendSystemCommand("resume_patrol")' in qml
@@ -531,7 +531,7 @@ def test_patrol_page_sends_controls_to_supervisor():
     assert 'backend.sendPatrolCommand("cancel")' not in qml
     assert 'backend.sendPatrolCommand("reload")' not in qml
     assert "确认启动平台巡检" in qml
-    assert "等待平台任务" in qml
+    assert "启动本地巡检" in qml
     assert "backend.pendingPlatformStart.executionId" in qml
     assert "!root.patrolStarting && !root.patrolRunning && backend.routePreviewOk" not in qml
     assert 'backend.patrolModeState === "running"' not in qml
@@ -546,12 +546,22 @@ def test_patrol_page_sends_controls_to_supervisor():
     assert 'backend.setRoutePreviewMode("full_map")' in qml
     assert 'id: startPatrolDialog' in qml
     assert 'id: stopPatrolDialog' in qml
-    assert 'onClicked: startPatrolDialog.open()' in qml
+    assert 'id: localStartPatrolDialog' in qml
+    assert 'backend.patrolCanStart && backend.routePreviewOk' in qml
     assert 'onClicked: stopPatrolDialog.open()' in qml
     assert qml.count('backend.confirmPlatformPatrolStart()') == 1
     assert qml.count('backend.sendSystemCommand("stop_robot_stack")') == 1
-    assert 'onAccepted: backend.startPatrolMode()' not in qml
     assert 'onAccepted: backend.sendSystemCommand("stop_robot_stack")' in qml
+
+
+def test_patrol_page_displays_live_dg_model_statuses():
+    qml = Path("src/ylhb_llm/qml/pages/PatrolPage.qml").read_text(encoding="utf-8")
+
+    assert 'backend.dgModelStatuses' in qml
+    assert 'MODEL-1 融合定位' in qml
+    assert 'MODEL-2 激光质量' in qml
+    assert 'MODEL-3 主动重定位' in qml
+    assert '综合导航健康' in qml
 
 
 def test_patrol_page_keeps_advanced_controls_and_lists_collapsed():

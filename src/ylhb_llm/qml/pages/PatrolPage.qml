@@ -22,6 +22,7 @@ ScrollView {
     property bool inspectionProfile: backend.patrolStartProfile === "inspection"
     property var readiness: backend.systemStatus.patrol_readiness || ({})
     property var previewMap: backend.routePreview.map_identity || ({})
+    property var dgStatuses: backend.dgModelStatuses || ({})
     property int startupStageIndex: stageIndex(backend.systemStatus.startup_step || "")
     property var readinessItems: [
         { "label": "底盘", "key": "bringup" },
@@ -60,6 +61,32 @@ ScrollView {
         if (backend.patrolError.length > 0 || backend.patrolStatus.state === "failed") return Theme.danger
         if (backend.patrolActive || backend.patrolStatus.state === "succeeded") return Theme.success
         return backend.patrolStarting ? Theme.info : Theme.warning
+    }
+
+    function dgStatus(key) {
+        return root.dgStatuses[key] || ({})
+    }
+
+    function dgStatusText(key) {
+        var item = dgStatus(key)
+        if (!item.fresh) return "未运行"
+        var values = item.values || ({})
+        if (key === "model1") return values.fusion_mode || item.message || "运行中"
+        if (key === "model2") {
+            var score = Number(values.geometry_score)
+            return (Number(item.level) === 0 ? "GOOD" : (item.message || "DEGRADED"))
+                + (isNaN(score) ? "" : " · " + score.toFixed(3))
+        }
+        if (key === "model3") return values.state || item.message || "运行中"
+        return values.overall_state || item.message || "运行中"
+    }
+
+    function dgStatusColor(key) {
+        var item = dgStatus(key)
+        if (!item.fresh) return Theme.muted
+        if (Number(item.level) >= 2) return Theme.danger
+        if (Number(item.level) === 1) return Theme.warning
+        return Theme.success
     }
 
     ColumnLayout {
@@ -264,13 +291,15 @@ ScrollView {
                     WarmButton {
                         objectName: "startPatrolButton"
                         text: backend.pendingPlatformStart.executionId
-                            ? "确认启动平台巡检" : "等待平台任务"
-                        enabled: !!backend.pendingPlatformStart.executionId
-                            && !backend.platformStartConfirmationPending
+                            ? "确认启动平台巡检" : "启动本地巡检"
+                        enabled: backend.pendingPlatformStart.executionId
+                            ? !backend.platformStartConfirmationPending
+                            : backend.patrolCanStart && backend.routePreviewOk
                         Layout.fillWidth: true
                         Layout.preferredHeight: 54
                         font.pixelSize: 16
-                        onClicked: startPatrolDialog.open()
+                        onClicked: backend.pendingPlatformStart.executionId
+                            ? startPatrolDialog.open() : localStartPatrolDialog.open()
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -315,6 +344,35 @@ ScrollView {
             StatusCard { Layout.fillWidth: true; title: "总体进度"; value: backend.patrolOverviewProgressLabel || backend.patrolProgressLabel || "未开始"; statusColor: backend.patrolActive ? Theme.success : Theme.muted }
             StatusCard { Layout.fillWidth: true; title: "当前轮次"; value: backend.patrolCycleLabel || "未开始"; statusColor: Theme.primary }
             StatusCard { Layout.fillWidth: true; title: "下一轮"; value: backend.patrolNextCycleLabel || "无等待"; statusColor: backend.patrolStatus.state === "waiting_loop" ? Theme.warning : Theme.muted }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: modelStatusColumn.implicitHeight + 32
+            radius: Theme.cardRadius
+            color: Theme.surface
+            border.color: Theme.border
+
+            ColumnLayout {
+                id: modelStatusColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 16
+                spacing: 10
+
+                Label { text: "DG-202611 三模型状态"; color: Theme.text; font.pixelSize: 19; font.bold: true }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: root.availableWidth >= 1000 ? 4 : 2
+                    columnSpacing: 12
+                    rowSpacing: 12
+                    StatusCard { Layout.fillWidth: true; title: "MODEL-1 融合定位"; value: root.dgStatusText("model1"); statusColor: root.dgStatusColor("model1") }
+                    StatusCard { Layout.fillWidth: true; title: "MODEL-2 激光质量"; value: root.dgStatusText("model2"); statusColor: root.dgStatusColor("model2") }
+                    StatusCard { Layout.fillWidth: true; title: "MODEL-3 主动重定位"; value: root.dgStatusText("model3"); statusColor: root.dgStatusColor("model3") }
+                    StatusCard { Layout.fillWidth: true; title: "综合导航健康"; value: root.dgStatusText("navigation"); statusColor: root.dgStatusColor("navigation") }
+                }
+            }
         }
 
         Rectangle {
@@ -473,6 +531,34 @@ ScrollView {
         }
 
         Item { Layout.preferredHeight: 8 }
+    }
+
+    Dialog {
+        id: localStartPatrolDialog
+        objectName: "localStartPatrolDialog"
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        title: "确认启动本地巡检？"
+        width: Math.min(root.availableWidth - 64, 560)
+        height: 260
+        anchors.centerIn: parent
+        contentItem: Label {
+            text: "系统将自动启动底盘、导航和巡检执行器，并按当前路线前往巡检点。"
+            color: Theme.text
+            font.pixelSize: 16
+            wrapMode: Text.Wrap
+        }
+        footer: Item {
+            implicitHeight: 64
+            RowLayout {
+                anchors.fill: parent
+                spacing: 10
+                Item { Layout.fillWidth: true }
+                WarmButton { text: "取消"; Layout.preferredWidth: 120; Layout.preferredHeight: 48; buttonColor: Theme.muted; onClicked: localStartPatrolDialog.close() }
+                WarmButton { objectName: "confirmLocalStartPatrolButton"; text: "确认启动"; enabled: backend.patrolCanStart && backend.routePreviewOk; Layout.preferredWidth: 140; Layout.preferredHeight: 48; onClicked: { localStartPatrolDialog.close(); backend.startPatrolMode() } }
+            }
+        }
     }
 
     Dialog {
