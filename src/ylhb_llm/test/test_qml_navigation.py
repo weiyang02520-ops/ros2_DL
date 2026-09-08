@@ -137,6 +137,8 @@ def test_inspection_launch_keeps_ui_as_full_stack_lifecycle_anchor():
     assert "OnProcessExit(" in launch
     assert "EmitEvent(event=Shutdown(" in launch
     assert "respawn=True" not in launch
+    assert "DeclareLaunchArgument('default_navigation_map'" in launch
+    assert "'default_navigation_map': default_navigation_map" in launch
     assert 'run_on_jetson.sh" inspection' in autostart
     assert "crash-loop limit" in autostart
     assert "onClosing: function(close)" in qml
