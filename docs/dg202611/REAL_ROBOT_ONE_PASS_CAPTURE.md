@@ -29,6 +29,17 @@ cd C:\Users\peng\Documents\工作区1\dg202611_robot_integration
 `deploy_preflight.log`、`DEPLOYMENT_RECORD.json` 和
 `DEPLOYED_SOURCE_MANIFEST.sha256`，现场测试前先保留这三份记录。
 
+确认预检记录无误后，再显式切换活动版本；脚本只允许指向通过部署预检的版本目录，
+并拒绝覆盖同名普通目录：
+
+```bash
+/home/nvidia/dg202611_ws_<提交号>/scripts/activate_dg_release.sh \
+  /home/nvidia/dg202611_ws_<提交号>
+```
+
+屏幕会同时打印新旧目标。需要回滚时，把参数换成上一个版本目录再次运行即可；
+`/home/nvidia/ros2_DL` 不参与切换。
+
 ## 采集命令
 
 在一个独立终端运行：
@@ -43,6 +54,25 @@ cd /home/nvidia/dg202611_ws
 ```
 
 等待终端显示 `CAPTURE_READY:` 后再开始本场景动作。
+
+采完整条巡检路线时，可让采集器先等待 `/patrol/status` 进入 `running`，并在巡检终态
+后继续保留 5 秒数据再自动停止：
+
+```bash
+./scripts/run_real_robot_capture.sh \
+  --scenario EXP01_ROUTE_FUSION_R1 \
+  --duration 900 \
+  --wait-for-patrol-start \
+  --stop-on-patrol-terminal \
+  --post-roll-sec 5 \
+  --startup-timeout-sec 120 \
+  --operator peng \
+  --hardware-notes "正式路线R1；现场人员看护；急停可用"
+```
+
+命令启动后先去 UI 点击“启动本地巡检”。旧的终态消息不会让采集器提前结束；只有本次
+实际观察到 `running` 后出现的 `succeeded/failed/canceled` 才会触发停止。若 120 秒
+内没有进入运行态，本次记录标为失败并保留已有日志，避免把空等数据误当成路线结果。
 
 结果默认保存在：
 

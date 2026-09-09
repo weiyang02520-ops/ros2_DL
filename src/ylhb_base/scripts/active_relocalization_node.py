@@ -10,6 +10,7 @@ safe stop.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -27,6 +28,12 @@ from active_relocalization_core import (  # noqa: E402
     SupervisorInput,
 )
 from pose_freshness import motion_aware_pose_fresh  # noqa: E402
+from mission_activity import (  # noqa: E402
+    ACTIVE,
+    MissionActivity,
+    MissionActivityGate,
+    ungated_activity,
+)
 
 
 def _stamp_to_seconds(stamp: Any) -> float | None:
@@ -142,7 +149,7 @@ def create_node(node_name: str) -> Any:
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from sensor_msgs.msg import LaserScan
-    from std_msgs.msg import Bool
+    from std_msgs.msg import Bool, String
 
     class ActiveRelocalizationNode(Node):
         def __init__(self) -> None:
@@ -150,6 +157,15 @@ def create_node(node_name: str) -> Any:
             self._declare_parameters()
             self._config = self._read_config()
             self._controller = ActiveRelocalizationController(self._config)
+            self._mission_gate_enabled = bool(self.get_parameter("mission_gate_enabled").value)
+            self._mission_gate = MissionActivityGate(
+                status_timeout_sec=float(self.get_parameter("mission_status_timeout_sec").value),
+                activation_grace_sec=float(self.get_parameter("mission_activation_grace_sec").value),
+            )
+            self._mission_status: dict[str, Any] | None = None
+            self._mission_status_received_at: float | None = None
+            self._mission_phase: str | None = None
+            self._last_failure_reason = ""
             self._last_tick = self._now()
             self._scan_received_at: float | None = None
             self._scan_sequence = 0
@@ -220,6 +236,13 @@ def create_node(node_name: str) -> Any:
                 self._on_manual_takeover,
                 10,
             )
+            if self._mission_gate_enabled:
+                self.create_subscription(
+                    String,
+                    str(self.get_parameter("system_status_topic").value),
+                    self._on_system_status,
+                    10,
+                )
             timer_period = float(self.get_parameter("timer_period").value)
             self._timer = self.create_timer(timer_period, self._tick)
             self.get_logger().warn(
@@ -242,6 +265,11 @@ def create_node(node_name: str) -> Any:
                 "manual_topic": "/dg/relocalization/manual_takeover",
                 "cmd_vel_topic": "/cmd_vel",
                 "status_topic": "/dg/relocalization/status",
+                "system_status_topic": "/inspection_ai/system_status",
+                "mission_gate_enabled": False,
+                "mission_status_timeout_sec": 3.0,
+                "mission_activation_grace_sec": 2.0,
+                "recovery_motion_armed": False,
                 "timer_period": 0.1,
                 "suspect_samples": 2,
                 "trigger_samples": 2,
@@ -396,6 +424,65 @@ def create_node(node_name: str) -> Any:
                 self._publish_zero()
                 self._tick()
 
+        def _on_system_status(self, message: Any) -> None:
+            try:
+                payload = json.loads(str(message.data))
+            except (TypeError, ValueError):
+                return
+            if not isinstance(payload, dict):
+                return
+            self._mission_status = payload
+            self._mission_status_received_at = self._now()
+
+        def _reset_runtime_state(self) -> None:
+            self._controller = ActiveRelocalizationController(self._config)
+            self._scan_received_at = None
+            self._scan_sequence = 0
+            self._consumed_scan_sequence = 0
+            self._odom_received_at = None
+            self._odom_pose = None
+            self._odom_yaw = None
+            self._odom_linear = 0.0
+            self._odom_angular = 0.0
+            self._amcl_received_at = None
+            self._amcl_reference_odom_pose = None
+            self._amcl_covariance = None
+            self._amcl_pose = None
+            self._lidar_quality = None
+            self._lidar_health_received_at = None
+            self._gnss_quality = None
+            self._gnss_health_received_at = None
+            self._candidate = None
+            self._candidate_received_at = None
+            self._candidate_sequence = 0
+            self._consumed_candidate_sequence = 0
+            self._scan_match_score = None
+            self._scan_match_inlier_ratio = None
+            self._scan_match_mean_distance = None
+            self._match_quality_received_at = None
+            self._manual_takeover = False
+
+        def _mission_activity(self, now: float) -> MissionActivity:
+            if not self._mission_gate_enabled:
+                return ungated_activity()
+            return self._mission_gate.evaluate(
+                self._mission_status, self._mission_status_received_at, now
+            )
+
+        def _apply_mission_transition(self, activity: MissionActivity) -> None:
+            previous = self._mission_phase
+            if activity.phase == previous:
+                return
+            if previous is None:
+                self._mission_phase = activity.phase
+                return
+            # Warmup -> active intentionally keeps observations gathered during
+            # the grace interval.  Every other phase edge starts from a clean
+            # controller so terminal states cannot leak into another mission.
+            if not (previous == "WARMUP" and activity.phase == ACTIVE):
+                self._reset_runtime_state()
+            self._mission_phase = activity.phase
+
         def _health(self, now: float) -> LocalizationHealth:
             pose = self._amcl_pose
             return LocalizationHealth(
@@ -430,6 +517,13 @@ def create_node(node_name: str) -> Any:
 
         def _tick(self) -> None:
             now = self._now()
+            activity = self._mission_activity(now)
+            self._apply_mission_transition(activity)
+            if not activity.mission_active:
+                self._publish_zero()
+                self._publish_gate_status(activity, now)
+                self._last_tick = now
+                return
             scan_updated = self._scan_sequence != self._consumed_scan_sequence
             if scan_updated:
                 self._consumed_scan_sequence = self._scan_sequence
@@ -446,10 +540,12 @@ def create_node(node_name: str) -> Any:
                 manual_takeover=self._manual_takeover,
             )
             output = self._controller.process(event)
+            if output.failure_reason:
+                self._last_failure_reason = str(output.failure_reason)
             self._publish_command(output.command_linear_x, output.command_angular_z)
             if output.request_candidate:
                 self._publish_seed(output.seed_pose)
-            self._publish_status(output, now)
+            self._publish_status(output, now, activity)
             self._last_tick = now
 
         def _publish_zero(self) -> None:
@@ -478,14 +574,43 @@ def create_node(node_name: str) -> Any:
             message.pose.covariance[35] = math.radians(20.0) ** 2
             self._seed_pub.publish(message)
 
-        def _publish_status(self, output: Any, now: float) -> None:
+        def _publish_gate_status(self, activity: MissionActivity, now: float) -> None:
             array = DiagnosticArray()
             array.header.stamp = self.get_clock().now().to_msg()
             status = DiagnosticStatus()
             status.name = "DG Active Relocalization Supervisor"
-            if output.state == "RECOVERED":
+            status.level = (
+                DiagnosticStatus.WARN
+                if activity.phase == "WARMUP" or not activity.status_fresh
+                else DiagnosticStatus.OK
+            )
+            status.message = activity.phase
+            fields = {
+                "state": activity.phase,
+                "mission_phase": activity.phase,
+                "mission_active": activity.mission_active,
+                "mission_status_fresh": activity.status_fresh,
+                "patrol_state": activity.patrol_state,
+                "standby_reason": activity.standby_reason,
+                "missing_components": ";".join(activity.missing_components),
+                "last_terminal_state": activity.terminal_state,
+                "last_failure_reason": self._last_failure_reason,
+                "recovery_motion_armed": bool(self.get_parameter("recovery_motion_armed").value),
+                "command_angular_z": 0.0,
+                "timestamp": now,
+            }
+            status.values = [KeyValue(key=str(key), value=str(value)) for key, value in fields.items()]
+            array.status = [status]
+            self._status_pub.publish(array)
+
+        def _publish_status(self, output: Any, now: float, activity: MissionActivity) -> None:
+            array = DiagnosticArray()
+            array.header.stamp = self.get_clock().now().to_msg()
+            status = DiagnosticStatus()
+            status.name = "DG Active Relocalization Supervisor"
+            if output.state in {"NORMAL", "RECOVERED"}:
                 status.level = DiagnosticStatus.OK
-            elif output.state in {"NORMAL", "SUSPECTED", "ACTIVE_SCAN", "WAITING_CANDIDATE", "VERIFYING", "STOPPING"}:
+            elif output.state in {"SUSPECTED", "ACTIVE_SCAN", "WAITING_CANDIDATE", "VERIFYING", "STOPPING"}:
                 status.level = DiagnosticStatus.WARN
             else:
                 status.level = DiagnosticStatus.ERROR
@@ -511,6 +636,14 @@ def create_node(node_name: str) -> Any:
                 "seed_pose": output.seed_pose,
                 "command_angular_z": output.command_angular_z,
                 "health_reasons": ";".join(output.health_reasons),
+                "mission_phase": activity.phase,
+                "mission_active": activity.mission_active,
+                "mission_status_fresh": activity.status_fresh,
+                "patrol_state": activity.patrol_state,
+                "standby_reason": activity.standby_reason,
+                "last_terminal_state": activity.terminal_state,
+                "last_failure_reason": self._last_failure_reason,
+                "recovery_motion_armed": bool(self.get_parameter("recovery_motion_armed").value),
                 "timestamp": now,
             }
             status.values = [KeyValue(key=str(key), value="" if value is None else str(value)) for key, value in fields.items()]

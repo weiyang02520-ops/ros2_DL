@@ -1,8 +1,8 @@
 # DG-202611 机器人融合准备说明
 
 这份分支用于把 MODEL-1、MODEL-2、MODEL-3 和已经采集的真实 UWB 数据接到
-现有机器人系统。它是独立开发副本，不替换保存好的机器人备份，也不加入现有开机
-自启动。
+现有机器人系统。它是独立开发副本，不替换保存好的机器人备份。仓库提供独立的
+`dg202611-models.service` 安装脚本；只有现场部署并执行安装脚本后才会加入开机启动。
 
 ## 已接好的链路
 
@@ -29,6 +29,20 @@ colcon build --symlink-install \
 source install/setup.bash
 ```
 
+若要在不改 `/home/nvidia/ros2_DL` 源码的前提下预览本版本 UI，先结束旧 inspection
+进程，再从独立发布目录运行：
+
+```bash
+cd /home/nvidia/dg202611_ws
+export DISPLAY=:1
+./scripts/run_dg_inspection.sh fullscreen:=true
+```
+
+这个入口仍从 `/home/nvidia/ros2_DL` 读取机器人地图、路线、凭据和硬件配置，只把已
+构建的 DG overlay 放到 ROS 包搜索顺序末端加载。验证失败时退出它，再使用原来的
+`/home/nvidia/ros2_DL/scripts/run_on_jetson.sh inspection` 即可回到原 UI。本轮不自动
+替换机器人已有的 UI 开机启动项。
+
 第一次只做旁路观察：
 
 ```bash
@@ -37,6 +51,32 @@ source install/setup.bash
 
 默认行为有三道隔离：不启动 Nav2、不启动 UWB 回放、不启动速度仲裁器。即使以后
 显式启动仲裁器，默认输出也只是 `/dg/test_cmd_vel`，不会直接控制底盘。
+
+## 巡检任务门控与开机运行
+
+生产集成入口订阅 `/inspection_ai/system_status`。只有
+`patrol_mode_state=running/returning_home`，且 Supervisor 报告 `bringup`、
+`navigation`、`patrol_executor` 均为 `running` 并持续稳定 2 秒后，MODEL-3 与综合导航
+健康才进入 `ACTIVE`。启动过程中显示 `WARMUP`；无任务、暂停、终止、组件缺失或状态
+超过 3 秒未更新时回到 `STANDBY`，MODEL-3 只发布零恢复速度并清理上一次任务状态。
+
+安装长期运行服务前，先确认没有手工启动的 DG 集成进程。安装脚本检测到重复实例会
+直接拒绝，不会同时启动两套模型：
+
+```bash
+cd /home/nvidia/dg202611_ws
+./scripts/install_dg_models_service.sh
+```
+
+该服务固定使用旁路观察配置：不启动 Nav2、不回放 UWB、不启用速度仲裁器，恢复速度
+仍隔离在 `/cmd_vel_recovery`，不会接管原系统 `/cmd_vel`。查看与移除命令：
+
+```bash
+systemctl --no-pager --full status dg202611-models.service
+./scripts/uninstall_dg_models_service.sh
+```
+
+现场完成 MODEL-3 受控运动验收前，不改变上述旁路配置。
 
 回放真实 UWB 稳态数据，但先不让它参与地图融合：
 

@@ -46,7 +46,10 @@ run_check() {
 echo ""
 echo "===STEP 1: ROS2 BUILD==="
 cd "$REPO_ROOT"
-if run_check "ROS2_BUILD" colcon build --packages-select ylhb_base --cmake-args -DBUILD_TESTING=OFF; then
+if run_check "ROS2_BUILD" colcon build \
+    --packages-select ylhb_base ylhb_llm \
+    --allow-overriding ylhb_base ylhb_llm \
+    --cmake-args -DBUILD_TESTING=OFF; then
     set +u
     source install/setup.bash
     set -u
@@ -64,6 +67,7 @@ run_check "IMPORT_MODEL1" python3 -c "import multisource_fusion_core"
 run_check "IMPORT_MODEL2" python3 -c "import lidar_robust_features"
 run_check "IMPORT_MODEL3" python3 -c "import active_relocalization_core"
 run_check "IMPORT_HEALTH" python3 -c "import navigation_health_core"
+run_check "IMPORT_MISSION_GATE" python3 -c "import mission_activity"
 run_check "IMPORT_UWB_MODEL" python3 -c "import uwb_data_model"
 run_check "IMPORT_UWB_ESTIMATOR" python3 -c "import uwb_2d_estimator"
 run_check "IMPORT_UWB_QUALITY" python3 -c "import uwb_quality_gate"

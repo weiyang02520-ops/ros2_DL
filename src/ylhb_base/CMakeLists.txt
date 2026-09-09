@@ -110,6 +110,7 @@ install(PROGRAMS
   scripts/active_relocalization_core.py
   scripts/navigation_health_core.py
   scripts/pose_freshness.py
+  scripts/mission_activity.py
   scripts/cmd_vel_arbiter_core.py
   scripts/multisource_fusion_core.py
   scripts/uwb_data_model.py

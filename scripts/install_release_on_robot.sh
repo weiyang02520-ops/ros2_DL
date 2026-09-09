@@ -57,7 +57,11 @@ mkdir "${release_dir}"
 tar -xzf "${archive_path}" -C "${release_dir}"
 for required in \
   scripts/run_dg202611_preflight.sh \
+  scripts/activate_dg_release.sh \
   scripts/run_dg_integration.sh \
+  scripts/run_dg_inspection.sh \
+  scripts/run_dg_models_service.sh \
+  scripts/install_dg_models_service.sh \
   scripts/run_real_robot_capture.sh \
   src/ylhb_base/CMakeLists.txt; do
   if [ ! -f "${release_dir}/${required}" ]; then

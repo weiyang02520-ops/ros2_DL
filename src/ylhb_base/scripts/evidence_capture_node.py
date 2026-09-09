@@ -29,6 +29,7 @@ DIAGNOSTIC_TOPICS = (
 )
 
 TERMINAL_RELOCALIZATION_STATES = {"RECOVERED", "FAILED", "MANUAL_REQUIRED"}
+TERMINAL_PATROL_STATES = {"succeeded", "failed", "canceled", "cancelled"}
 
 
 def utc_now() -> str:
@@ -131,6 +132,26 @@ class RelocalizationAttemptTracker:
         }
 
 
+class PatrolLifecycleTracker:
+    """Emit one start and one terminal event for the observed patrol run."""
+
+    def __init__(self) -> None:
+        self.started = False
+        self.terminal = False
+
+    def consume(self, payload: Any) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+        state = str(payload.get("state") or payload.get("patrol_mode_state") or "").strip().lower()
+        if state in {"running", "returning_home"} and not self.started:
+            self.started = True
+            return "started"
+        if self.started and state in TERMINAL_PATROL_STATES and not self.terminal:
+            self.terminal = True
+            return "terminal"
+        return None
+
+
 def create_node(
     node_name: str,
     output_dir: Path,
@@ -139,10 +160,13 @@ def create_node(
     estimated_pose_topic: str,
     ground_truth: tuple[float, float] | None,
     ground_truth_frame: str,
+    patrol_start_file: Path | None = None,
+    patrol_terminal_file: Path | None = None,
 ) -> Any:
     from diagnostic_msgs.msg import DiagnosticArray
     from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
     from rclpy.node import Node
+    from std_msgs.msg import String
 
     class EvidenceCaptureNode(Node):
         def __init__(self) -> None:
@@ -156,6 +180,7 @@ def create_node(
             self._ground_truth_frame = ground_truth_frame
             self._estimated_pose_topic = estimated_pose_topic
             self._attempt_tracker = RelocalizationAttemptTracker()
+            self._patrol_tracker = PatrolLifecycleTracker()
             self._sinks = {
                 "diagnostics": CsvSink(
                     output_dir / "diagnostic_samples.csv",
@@ -260,6 +285,8 @@ def create_node(
                     lambda message, source_topic=topic: self._on_diagnostic(source_topic, message),
                     50,
                 )
+            if patrol_start_file is not None or patrol_terminal_file is not None:
+                self.create_subscription(String, "/patrol/status", self._on_patrol_status, 20)
 
             ready_file.parent.mkdir(parents=True, exist_ok=True)
             ready_file.write_text(
@@ -310,6 +337,34 @@ def create_node(
                 }
             )
             self._count("lidar_features")
+
+        @staticmethod
+        def _write_signal(path: Path | None, payload: dict[str, Any]) -> None:
+            if path is None:
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            temporary.replace(path)
+
+        def _on_patrol_status(self, message: Any) -> None:
+            try:
+                payload = json.loads(str(message.data))
+            except (TypeError, ValueError):
+                return
+            event = self._patrol_tracker.consume(payload)
+            if event == "started":
+                self._write_signal(
+                    patrol_start_file,
+                    {"event": event, "observed_utc": utc_now(), "status": payload},
+                )
+            elif event == "terminal":
+                self._write_signal(
+                    patrol_terminal_file,
+                    {"event": event, "observed_utc": utc_now(), "status": payload},
+                )
 
         def _on_estimated_pose(self, message: Any) -> None:
             if not self._accepting():
@@ -416,6 +471,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ground-truth-x", type=float)
     parser.add_argument("--ground-truth-y", type=float)
     parser.add_argument("--ground-truth-frame", default="map")
+    parser.add_argument("--patrol-start-file")
+    parser.add_argument("--patrol-terminal-file")
     return parser
 
 
@@ -451,6 +508,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments.estimated_pose_topic,
         ground_truth,
         arguments.ground_truth_frame.strip(),
+        Path(arguments.patrol_start_file).expanduser().resolve() if arguments.patrol_start_file else None,
+        Path(arguments.patrol_terminal_file).expanduser().resolve() if arguments.patrol_terminal_file else None,
     )
     try:
         rclpy.spin(node)

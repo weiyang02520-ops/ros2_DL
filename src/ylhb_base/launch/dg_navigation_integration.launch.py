@@ -47,6 +47,9 @@ def generate_launch_description():
     uwb_to_map_offset_y = LaunchConfiguration("uwb_to_map_offset_y")
     required_signals = LaunchConfiguration("required_signals")
     post_recovery_stable_sec = LaunchConfiguration("post_recovery_stable_sec")
+    mission_gate_enabled = LaunchConfiguration("mission_gate_enabled")
+    mission_status_timeout_sec = LaunchConfiguration("mission_status_timeout_sec")
+    mission_activation_grace_sec = LaunchConfiguration("mission_activation_grace_sec")
     cmd_vel_output_topic = LaunchConfiguration("cmd_vel_output_topic")
     gnss_origin_latitude = LaunchConfiguration("gnss_origin_latitude")
     gnss_origin_longitude = LaunchConfiguration("gnss_origin_longitude")
@@ -140,6 +143,11 @@ def generate_launch_description():
                 "match_quality_topic": "/dg/relocalization/match_quality",
                 "cmd_vel_topic": "/cmd_vel_recovery",
                 "required_signals": required_signals,
+                "system_status_topic": "/inspection_ai/system_status",
+                "mission_gate_enabled": ParameterValue(mission_gate_enabled, value_type=bool),
+                "mission_status_timeout_sec": ParameterValue(mission_status_timeout_sec, value_type=float),
+                "mission_activation_grace_sec": ParameterValue(mission_activation_grace_sec, value_type=float),
+                "recovery_motion_armed": ParameterValue(enable_cmd_vel_arbiter, value_type=bool),
             }
         ],
     )
@@ -156,6 +164,11 @@ def generate_launch_description():
                 "post_recovery_stable_sec": ParameterValue(
                     post_recovery_stable_sec, value_type=float
                 ),
+                "system_status_topic": "/inspection_ai/system_status",
+                "mission_gate_enabled": ParameterValue(mission_gate_enabled, value_type=bool),
+                "mission_status_timeout_sec": ParameterValue(mission_status_timeout_sec, value_type=float),
+                "mission_activation_grace_sec": ParameterValue(mission_activation_grace_sec, value_type=float),
+                "recovery_motion_armed": ParameterValue(enable_cmd_vel_arbiter, value_type=bool),
             }
         ],
     )
@@ -263,6 +276,21 @@ def generate_launch_description():
                 "post_recovery_stable_sec",
                 default_value="1.0",
                 description="Continuous healthy time before recovery hands control back to navigation",
+            ),
+            DeclareLaunchArgument(
+                "mission_gate_enabled",
+                default_value="true",
+                description="Gate MODEL-3 and navigation health by live patrol lifecycle",
+            ),
+            DeclareLaunchArgument(
+                "mission_status_timeout_sec",
+                default_value="3.0",
+                description="Maximum age of /inspection_ai/system_status before safe standby",
+            ),
+            DeclareLaunchArgument(
+                "mission_activation_grace_sec",
+                default_value="2.0",
+                description="Continuous ready time before active recovery supervision",
             ),
             DeclareLaunchArgument(
                 "cmd_vel_output_topic",

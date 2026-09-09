@@ -2,6 +2,7 @@
 set -euo pipefail
 
 WS_DIR="${WS_DIR:-$HOME/ros2_DL}"
+OVERLAY_WS_DIR="${YLHB_OVERLAY_WS:-}"
 ROS_DISTRO="${ROS_DISTRO:-humble}"
 MODE="${1:-help}"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mobile_bridge_owner.sh"
@@ -55,6 +56,13 @@ cd "${WS_DIR}"
 source_ros_setup "/opt/ros/${ROS_DISTRO}/setup.bash"
 if [ -f "${WS_DIR}/install/setup.bash" ]; then
   source_ros_setup "${WS_DIR}/install/setup.bash"
+fi
+if [ -n "${OVERLAY_WS_DIR}" ] && [ "${OVERLAY_WS_DIR}" != "${WS_DIR}" ]; then
+  if [ ! -f "${OVERLAY_WS_DIR}/install/setup.bash" ]; then
+    echo "ERROR: overlay workspace is not built: ${OVERLAY_WS_DIR}" >&2
+    exit 2
+  fi
+  source_ros_setup "${OVERLAY_WS_DIR}/install/setup.bash"
 fi
 
 disable_display_sleep() {

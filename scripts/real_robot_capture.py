@@ -22,7 +22,11 @@ from typing import Iterable, Sequence
 
 
 DEFAULT_TOPICS = (
+    "/inspection_ai/system_status",
+    "/patrol/status",
+    "/patrol/event",
     "/scan",
+    "/imu/data",
     "/odom",
     "/odometry/filtered",
     "/amcl_pose",
@@ -64,6 +68,12 @@ SNAPSHOT_COMMANDS = {
         "systemctl",
         "status",
         "ylhb-mobile-bridge.service",
+        "--no-pager",
+    ),
+    "dg_models_service.txt": (
+        "systemctl",
+        "status",
+        "dg202611-models.service",
         "--no-pager",
     ),
 }
@@ -269,6 +279,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--operator", default=os.environ.get("USER", "unknown"))
     parser.add_argument("--hardware-notes", default="")
     parser.add_argument("--sample-period", type=float, default=1.0)
+    parser.add_argument("--wait-for-patrol-start", action="store_true")
+    parser.add_argument("--stop-on-patrol-terminal", action="store_true")
+    parser.add_argument("--post-roll-sec", type=float, default=5.0)
+    parser.add_argument("--startup-timeout-sec", type=float, default=60.0)
     parser.add_argument("--topic", action="append", default=[], help="Additional absolute ROS topic")
     parser.add_argument("--estimated-pose-topic", default="/dg/fusion/pose")
     parser.add_argument("--ground-truth-x", type=float)
@@ -284,6 +298,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--duration must be non-negative")
     if arguments.sample_period <= 0.0:
         raise SystemExit("--sample-period must be positive")
+    if arguments.post_roll_sec < 0.0:
+        raise SystemExit("--post-roll-sec must be non-negative")
+    if arguments.startup_timeout_sec <= 0.0:
+        raise SystemExit("--startup-timeout-sec must be positive")
     ground_truth_supplied = (
         arguments.ground_truth_x is not None,
         arguments.ground_truth_y is not None,
@@ -325,6 +343,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "started_utc": None,
         "requested_duration_sec": arguments.duration,
         "sample_period_sec": arguments.sample_period,
+        "patrol_lifecycle": {
+            "wait_for_start": arguments.wait_for_patrol_start,
+            "stop_on_terminal": arguments.stop_on_patrol_terminal,
+            "post_roll_sec": arguments.post_roll_sec,
+            "startup_timeout_sec": arguments.startup_timeout_sec,
+        },
         "hostname": platform.node(),
         "platform": platform.platform(),
         "ros_distro": os.environ.get("ROS_DISTRO"),
@@ -363,6 +387,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     structured_dir.mkdir()
     evidence_ready_file = structured_dir / "READY.json"
     evidence_start_file = structured_dir / "START.json"
+    patrol_start_file = structured_dir / "PATROL_STARTED.json"
+    patrol_terminal_file = structured_dir / "PATROL_TERMINAL.json"
     evidence_script = repository / "src" / "ylhb_base" / "scripts" / "evidence_capture_node.py"
     if not evidence_script.is_file():
         raise RuntimeError(f"structured evidence node is missing: {evidence_script}")
@@ -379,6 +405,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments.estimated_pose_topic,
         "--ground-truth-frame",
         arguments.ground_truth_frame,
+        "--patrol-start-file",
+        str(patrol_start_file),
+        "--patrol-terminal-file",
+        str(patrol_terminal_file),
     ]
     if all(ground_truth_supplied):
         evidence_command.extend(
@@ -439,6 +469,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise RuntimeError(
                 f"structured evidence logger exited early with code {evidence_process.returncode}"
             )
+        if arguments.wait_for_patrol_start:
+            startup_deadline = time.monotonic() + arguments.startup_timeout_sec
+            while not patrol_start_file.is_file():
+                if time.monotonic() >= startup_deadline:
+                    raise RuntimeError("patrol did not enter running state before startup timeout")
+                if recorder.poll() is not None:
+                    raise RuntimeError(f"ros2 bag recorder stopped with code {recorder.returncode}")
+                if evidence_process.poll() is not None:
+                    raise RuntimeError(
+                        f"structured evidence logger stopped with code {evidence_process.returncode}"
+                    )
+                time.sleep(0.1)
         started_utc = utc_now()
         started_monotonic = time.monotonic()
         metadata["started_utc"] = started_utc
@@ -451,6 +493,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"CAPTURE_READY: {session}", flush=True)
         with resource_path.open("w", newline="", encoding="utf-8") as resource_handle:
             writer: csv.DictWriter[str] | None = None
+            terminal_detected_at: float | None = None
             while arguments.duration == 0.0 or time.monotonic() - started_monotonic < arguments.duration:
                 sample, previous_cpu = read_proc_sample(previous_cpu)
                 sample["elapsed_sec"] = time.monotonic() - started_monotonic
@@ -465,6 +508,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise RuntimeError(
                         f"structured evidence logger stopped with code {evidence_process.returncode}"
                     )
+                if arguments.stop_on_patrol_terminal and patrol_terminal_file.is_file():
+                    if terminal_detected_at is None:
+                        terminal_detected_at = time.monotonic()
+                    if time.monotonic() - terminal_detected_at >= arguments.post_roll_sec:
+                        break
                 time.sleep(arguments.sample_period)
     except KeyboardInterrupt:
         interrupted = True
@@ -513,6 +561,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "structured_evidence_ready": evidence_ready_file.is_file(),
         "structured_evidence_started": evidence_start_file.is_file(),
         "structured_evidence_summary_present": structured_summary.is_file(),
+        "patrol_start_observed": patrol_start_file.is_file(),
+        "patrol_terminal_observed": patrol_terminal_file.is_file(),
         "tegrastats_return_code": tegrastats_code,
         "rosbag_path": str(bag_path),
         "rosbag_present": bag_path.exists(),

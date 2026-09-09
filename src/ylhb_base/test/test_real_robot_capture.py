@@ -21,6 +21,7 @@ if str(YLHB_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(YLHB_SCRIPTS))
 
 from evidence_capture_node import (  # noqa: E402
+    PatrolLifecycleTracker,
     RelocalizationAttemptTracker,
     encode_feature_points,
 )
@@ -36,8 +37,34 @@ def test_capture_topics_cover_all_three_models_and_uwb():
         "/dg/uwb/quality",
         "/dg/fusion/status",
         "/dg/relocalization/status",
+        "/inspection_ai/system_status",
+        "/patrol/status",
+        "/patrol/event",
+        "/imu/data",
     }
     assert required.issubset(DEFAULT_TOPICS)
+
+
+def test_patrol_lifecycle_tracker_ignores_old_terminal_until_a_new_run():
+    tracker = PatrolLifecycleTracker()
+    assert tracker.consume({"state": "succeeded"}) is None
+    assert tracker.consume({"state": "running"}) == "started"
+    assert tracker.consume({"state": "running"}) is None
+    assert tracker.consume({"state": "succeeded"}) == "terminal"
+    assert tracker.consume({"state": "failed"}) is None
+
+
+def test_capture_supports_patrol_lifecycle_shutdown_without_motion_commands():
+    source = (SCRIPTS / "real_robot_capture.py").read_text(encoding="utf-8")
+    for option in (
+        "--wait-for-patrol-start",
+        "--stop-on-patrol-terminal",
+        "--post-roll-sec",
+        "--startup-timeout-sec",
+    ):
+        assert option in source
+    assert "PATROL_STARTED.json" in source
+    assert "PATROL_TERMINAL.json" in source
 
 
 def test_unique_topics_preserves_order_and_rejects_relative_names():

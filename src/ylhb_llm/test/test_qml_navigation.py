@@ -564,6 +564,12 @@ def test_patrol_page_displays_live_dg_model_statuses():
     assert 'MODEL-2 激光质量' in qml
     assert 'MODEL-3 主动重定位' in qml
     assert '综合导航健康' in qml
+    assert 'function dgDetailText(key)' in qml
+    assert 'recovery_motion_armed' in qml
+    assert 'mission_phase' in qml
+    assert 'measurement_confidence' in qml
+    assert 'geometry_score' in qml
+    assert 'standby_reason' in qml
 
 
 def test_patrol_page_keeps_advanced_controls_and_lists_collapsed():

@@ -149,6 +149,7 @@ def run_one(
     scenario_copy.write_text(scenario_file.read_text(encoding="utf-8"), encoding="utf-8")
     integration_command = [
         "ros2", "launch", "ylhb_base", "dg_navigation_integration.launch.py",
+        "mission_gate_enabled:=false",
         "enable_nav2:=false", "enable_multisource_fusion:=true",
         "cmd_vel_output_topic:=/dg/test_cmd_vel",
     ]

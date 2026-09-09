@@ -12,9 +12,18 @@ CMAKE = ROOT / "CMakeLists.txt"
 REPOSITORY_ROOT = ROOT.parents[1]
 DG_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_integration.sh"
 REMOTE_INSTALLER = REPOSITORY_ROOT / "scripts" / "install_release_on_robot.sh"
+RELEASE_ACTIVATOR = REPOSITORY_ROOT / "scripts" / "activate_dg_release.sh"
 WINDOWS_DEPLOYER = REPOSITORY_ROOT / "scripts" / "deploy_release_from_windows.ps1"
 PREFLIGHT = REPOSITORY_ROOT / "scripts" / "run_dg202611_preflight.sh"
+DG_SERVICE_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_models_service.sh"
+DG_SERVICE_INSTALLER = REPOSITORY_ROOT / "scripts" / "install_dg_models_service.sh"
+DG_INSPECTION_RUNNER = REPOSITORY_ROOT / "scripts" / "run_dg_inspection.sh"
 GIT_ATTRIBUTES = REPOSITORY_ROOT / ".gitattributes"
+
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from mission_activity import MissionActivityGate  # noqa: E402
 
 
 class NavigationProtocolAndLaunchTests(unittest.TestCase):
@@ -22,6 +31,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         for path in (
             SCRIPTS / "navigation_health_core.py",
             SCRIPTS / "navigation_health_node.py",
+            SCRIPTS / "mission_activity.py",
             SCRIPTS / "cmd_vel_arbiter_core.py",
             SCRIPTS / "cmd_vel_arbiter_node.py",
             SCRIPTS / "uwb_input.py",
@@ -126,6 +136,7 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         for script in (
             "navigation_health_core.py",
             "navigation_health_node.py",
+            "mission_activity.py",
             "cmd_vel_arbiter_core.py",
             "cmd_vel_arbiter_node.py",
             "uwb_input.py",
@@ -157,17 +168,50 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
 
     def test_release_deployment_is_versioned_verified_and_motion_free(self) -> None:
         installer = REMOTE_INSTALLER.read_text(encoding="utf-8")
+        activator = RELEASE_ACTIVATOR.read_text(encoding="utf-8")
         deployer = WINDOWS_DEPLOYER.read_text(encoding="utf-8")
         self.assertIn("sha256sum", installer)
         self.assertIn("Refusing to overwrite existing release directory", installer)
         self.assertIn("motion_test_executed", installer)
         self.assertIn("run_dg202611_preflight.sh", installer)
+        self.assertIn("Refusing to replace non-symlink path", activator)
+        self.assertIn("DEPLOYMENT_RECORD.json", activator)
+        self.assertIn("mv -Tf", activator)
+        self.assertIn("/home/nvidia/ros2_DL was not changed", activator)
         self.assertIn("Get-FileHash", deployer)
         self.assertIn("Test-NetConnection", deployer)
-        for text in (installer, deployer):
+        for text in (installer, deployer, activator):
             self.assertNotIn("/home/nvidia/ros2_DL/src", text)
             self.assertNotIn("topic pub", text)
             self.assertNotIn("cmd_vel", text)
+
+    def test_dg_models_service_is_single_owner_and_observation_only(self) -> None:
+        runner = DG_SERVICE_RUNNER.read_text(encoding="utf-8")
+        installer = DG_SERVICE_INSTALLER.read_text(encoding="utf-8")
+        self.assertIn("run_dg_integration.sh", runner)
+        self.assertIn("enable_nav2:=false", runner)
+        self.assertIn("enable_cmd_vel_arbiter:=false", runner)
+        self.assertIn("enable_uwb_replay:=false", runner)
+        self.assertIn("cmd_vel_output_topic:=/dg/test_cmd_vel", runner)
+        self.assertIn("mission_gate_enabled:=true", runner)
+        self.assertIn("dg202611-models.service", installer)
+        self.assertIn("KillSignal=SIGINT", installer)
+        self.assertIn("KillMode=control-group", installer)
+        self.assertIn("Restart=on-failure", installer)
+        self.assertIn("Refusing to start a second DG integration instance", installer)
+        self.assertNotIn("ros2 topic pub", runner)
+        self.assertNotIn("/home/nvidia/ros2_DL/src", installer)
+
+    def test_dg_inspection_uses_base_assets_with_the_versioned_overlay(self) -> None:
+        runner = DG_INSPECTION_RUNNER.read_text(encoding="utf-8")
+        jetson = (REPOSITORY_ROOT / "scripts" / "run_on_jetson.sh").read_text(encoding="utf-8")
+        preflight = PREFLIGHT.read_text(encoding="utf-8")
+        self.assertIn('export WS_DIR="${base_ws}"', runner)
+        self.assertIn('export YLHB_OVERLAY_WS="${integration_ws}"', runner)
+        self.assertIn("Refusing to start a second inspection UI/Supervisor stack", runner)
+        self.assertIn('source_ros_setup "${OVERLAY_WS_DIR}/install/setup.bash"', jetson)
+        self.assertIn("--packages-select ylhb_base ylhb_llm", preflight)
+        self.assertNotIn("topic pub", runner)
 
     def test_preflight_counter_does_not_trip_errexit_after_first_pass(self) -> None:
         text = PREFLIGHT.read_text(encoding="utf-8")
@@ -186,6 +230,65 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
     def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")
         self.assertIn('"cmd_vel_topic": "/cmd_vel"', text)
+
+    def test_production_integration_enables_mission_gate_but_core_defaults_stay_compatible(self) -> None:
+        launch = LAUNCH.read_text(encoding="utf-8")
+        active = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")
+        health = (SCRIPTS / "navigation_health_node.py").read_text(encoding="utf-8")
+        runner = (
+            REPOSITORY_ROOT
+            / "src"
+            / "dg_synthetic_validation"
+            / "dg_synthetic_validation"
+            / "scenario_runner.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"mission_gate_enabled",\n                default_value="true"', launch)
+        self.assertIn('"mission_gate_enabled": ParameterValue(mission_gate_enabled', launch)
+        self.assertIn('"mission_gate_enabled": False', active)
+        self.assertIn('self.declare_parameter("mission_gate_enabled", False)', health)
+        self.assertIn('"mission_gate_enabled:=false"', runner)
+
+    def test_mission_status_contract_is_shared_by_recovery_and_health(self) -> None:
+        for path in (
+            SCRIPTS / "active_relocalization_node.py",
+            SCRIPTS / "navigation_health_node.py",
+        ):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('"system_status_topic": "/inspection_ai/system_status"' if "active" in path.name else '"system_status_topic", "/inspection_ai/system_status"', text)
+            for field in (
+                "mission_phase",
+                "mission_active",
+                "mission_status_fresh",
+                "standby_reason",
+                "last_terminal_state",
+                "last_failure_reason",
+                "recovery_motion_armed",
+            ):
+                self.assertIn(field, text)
+
+    def test_mission_gate_only_activates_for_a_fresh_ready_patrol(self) -> None:
+        def status(state: str = "running", **overrides):
+            payload = {
+                "patrol_mode_state": state,
+                "bringup": "running",
+                "navigation": "running",
+                "patrol_executor": "running",
+            }
+            payload.update(overrides)
+            return payload
+
+        gate = MissionActivityGate(status_timeout_sec=3.0, activation_grace_sec=2.0)
+        self.assertEqual(gate.evaluate(None, None, 0.0).standby_reason, "NO_SYSTEM_STATUS")
+        self.assertEqual(gate.evaluate(status(), 0.0, 10.0).standby_reason, "SYSTEM_STATUS_STALE")
+        self.assertEqual(
+            gate.evaluate(status(navigation="stopped"), 11.0, 11.0).standby_reason,
+            "COMPONENTS_NOT_READY",
+        )
+        self.assertEqual(gate.evaluate(status(), 12.0, 12.0).phase, "WARMUP")
+        self.assertEqual(gate.evaluate(status(), 14.0, 14.0).phase, "ACTIVE")
+        terminal = gate.evaluate(status("succeeded"), 15.0, 15.0)
+        self.assertEqual(terminal.phase, "STANDBY")
+        self.assertEqual(terminal.terminal_state, "succeeded")
 
     def test_gnss_is_not_wired_into_ekf_by_integration_launch(self) -> None:
         text = LAUNCH.read_text(encoding="utf-8")

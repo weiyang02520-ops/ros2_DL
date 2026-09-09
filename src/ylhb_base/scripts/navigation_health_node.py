@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -20,6 +21,12 @@ from navigation_health_core import (  # noqa: E402
 )
 from pose_freshness import motion_aware_pose_fresh  # noqa: E402
 from diagnostic_level import normalize_diagnostic_level  # noqa: E402
+from mission_activity import (  # noqa: E402
+    ACTIVE,
+    MissionActivity,
+    MissionActivityGate,
+    ungated_activity,
+)
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -60,6 +67,7 @@ def create_node(node_name: str) -> Any:
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
     from sensor_msgs.msg import LaserScan
+    from std_msgs.msg import String
 
     class NavigationHealthNode(Node):
         def __init__(self) -> None:
@@ -73,6 +81,11 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("odom_topic", "/odom")
             self.declare_parameter("scan_topic", "/scan")
             self.declare_parameter("status_topic", "/dg/navigation/status")
+            self.declare_parameter("system_status_topic", "/inspection_ai/system_status")
+            self.declare_parameter("mission_gate_enabled", False)
+            self.declare_parameter("mission_status_timeout_sec", 3.0)
+            self.declare_parameter("mission_activation_grace_sec", 2.0)
+            self.declare_parameter("recovery_motion_armed", False)
             self.declare_parameter("freshness_timeout", 1.0)
             self.declare_parameter("amcl_motion_translation_tolerance", 0.03)
             self.declare_parameter("amcl_motion_rotation_tolerance", 0.03)
@@ -128,6 +141,15 @@ def create_node(node_name: str) -> Any:
                 DiagnosticArray, str(self.get_parameter("match_quality_topic").value),
                 lambda message: self._on_quality("scan_match", message), 10
             )
+            self._mission_gate_enabled = bool(self.get_parameter("mission_gate_enabled").value)
+            self._mission_gate = MissionActivityGate(
+                status_timeout_sec=float(self.get_parameter("mission_status_timeout_sec").value),
+                activation_grace_sec=float(self.get_parameter("mission_activation_grace_sec").value),
+            )
+            self._mission_status: dict[str, Any] | None = None
+            self._mission_status_received_at: float | None = None
+            self._mission_phase: str | None = None
+            self._last_failure_reason = ""
             self.create_subscription(
                 DiagnosticArray, str(self.get_parameter("uwb_quality_topic").value),
                 lambda message: self._on_quality("uwb", message), 10
@@ -149,6 +171,13 @@ def create_node(node_name: str) -> Any:
                 self._on_scan,
                 qos_profile_sensor_data,
             )
+            if self._mission_gate_enabled:
+                self.create_subscription(
+                    String,
+                    str(self.get_parameter("system_status_topic").value),
+                    self._on_system_status,
+                    10,
+                )
             self._timer = self.create_timer(float(self.get_parameter("timer_period").value), self._tick)
             self.get_logger().info("unified DG-202611 navigation health side-channel active")
 
@@ -224,8 +253,70 @@ def create_node(node_name: str) -> Any:
         def _on_scan(self, _message: Any) -> None:
             self._scan_received_at = self._now()
 
+        def _on_system_status(self, message: Any) -> None:
+            try:
+                payload = json.loads(str(message.data))
+            except (TypeError, ValueError):
+                return
+            if not isinstance(payload, dict):
+                return
+            self._mission_status = payload
+            self._mission_status_received_at = self._now()
+
+        def _new_aggregator(self) -> NavigationHealthAggregator:
+            return NavigationHealthAggregator(
+                max_amcl_covariance=float(self.get_parameter("max_amcl_covariance").value),
+                freshness_timeout=self._timeout,
+                min_lidar_quality=self._min_lidar_quality,
+                post_recovery_stable_sec=float(
+                    self.get_parameter("post_recovery_stable_sec").value
+                ),
+            )
+
+        def _reset_runtime_state(self) -> None:
+            self._aggregator = self._new_aggregator()
+            self._gnss_state = None
+            self._gnss_received_at = None
+            self._lidar_state = None
+            self._lidar_received_at = None
+            self._scan_match_state = None
+            self._scan_match_received_at = None
+            self._uwb_state = None
+            self._uwb_received_at = None
+            self._relocalization_state = None
+            self._relocalization_received_at = None
+            self._amcl_received_at = None
+            self._amcl_reference_odom_pose = None
+            self._amcl_covariance = None
+            self._odom_received_at = None
+            self._odom_pose = None
+            self._scan_received_at = None
+
+        def _mission_activity(self, now: float) -> MissionActivity:
+            if not self._mission_gate_enabled:
+                return ungated_activity()
+            return self._mission_gate.evaluate(
+                self._mission_status, self._mission_status_received_at, now
+            )
+
+        def _apply_mission_transition(self, activity: MissionActivity) -> None:
+            previous = self._mission_phase
+            if activity.phase == previous:
+                return
+            if previous is None:
+                self._mission_phase = activity.phase
+                return
+            if not (previous == "WARMUP" and activity.phase == ACTIVE):
+                self._reset_runtime_state()
+            self._mission_phase = activity.phase
+
         def _tick(self) -> None:
             now = self._now()
+            activity = self._mission_activity(now)
+            self._apply_mission_transition(activity)
+            if not activity.mission_active:
+                self._publish_gate_status(activity, now)
+                return
             output = self._aggregator.evaluate(
                 NavigationHealthInput(
                     now=now,
@@ -254,7 +345,9 @@ def create_node(node_name: str) -> Any:
                     logger.warn(output.transition_message)
                 else:
                     logger.info(output.transition_message)
-            self._publish(output)
+            if output.overall_state in {"FAILED", "MANUAL_REQUIRED"}:
+                self._last_failure_reason = ";".join(output.reasons)
+            self._publish(output, activity)
 
         def _amcl_fresh(self, now: float) -> bool | None:
             return motion_aware_pose_fresh(
@@ -265,7 +358,36 @@ def create_node(node_name: str) -> Any:
                 float(self.get_parameter("amcl_motion_rotation_tolerance").value),
             )
 
-        def _publish(self, output: Any) -> None:
+        def _publish_gate_status(self, activity: MissionActivity, now: float) -> None:
+            message = DiagnosticArray()
+            message.header.stamp = self.get_clock().now().to_msg()
+            status = DiagnosticStatus()
+            status.name = "DG Navigation Health"
+            status.level = (
+                DiagnosticStatus.WARN
+                if activity.phase == "WARMUP" or not activity.status_fresh
+                else DiagnosticStatus.OK
+            )
+            status.message = activity.phase
+            fields = {
+                "overall_state": activity.phase,
+                "mission_phase": activity.phase,
+                "mission_active": activity.mission_active,
+                "mission_status_fresh": activity.status_fresh,
+                "patrol_state": activity.patrol_state,
+                "standby_reason": activity.standby_reason,
+                "missing_components": ";".join(activity.missing_components),
+                "last_terminal_state": activity.terminal_state,
+                "last_failure_reason": self._last_failure_reason,
+                "recovery_motion_armed": bool(self.get_parameter("recovery_motion_armed").value),
+                "reasons": activity.standby_reason,
+                "timestamp": now,
+            }
+            status.values = [KeyValue(key=str(key), value=str(value)) for key, value in fields.items()]
+            message.status = [status]
+            self._status_pub.publish(message)
+
+        def _publish(self, output: Any, activity: MissionActivity) -> None:
             message = DiagnosticArray()
             message.header.stamp = self.get_clock().now().to_msg()
             status = DiagnosticStatus()
@@ -284,6 +406,14 @@ def create_node(node_name: str) -> Any:
                 "post_recovery_required": output.post_recovery_required,
                 "post_recovery_complete": output.post_recovery_complete,
                 "reasons": ";".join(output.reasons),
+                "mission_phase": activity.phase,
+                "mission_active": activity.mission_active,
+                "mission_status_fresh": activity.status_fresh,
+                "patrol_state": activity.patrol_state,
+                "standby_reason": activity.standby_reason,
+                "last_terminal_state": activity.terminal_state,
+                "last_failure_reason": self._last_failure_reason,
+                "recovery_motion_armed": bool(self.get_parameter("recovery_motion_armed").value),
                 "timestamp": output.timestamp,
             }
             status.values = [KeyValue(key=str(key), value=str(value)) for key, value in fields.items()]
