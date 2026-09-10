@@ -245,6 +245,17 @@ class AdaptiveWeightingTests(unittest.TestCase):
 
 
 class FusionCoreTests(unittest.TestCase):
+    def test_idle_before_first_pose_does_not_inflate_initial_uncertainty(self) -> None:
+        fusion = core()
+        initial = fusion.process(FusionInput(0.0))
+        idle = fusion.process(FusionInput(600.0))
+        first_pose = fusion.process(FusionInput(601.0, local_odom=odom(0.0, timestamp=601.0)))
+
+        self.assertEqual(idle.position_uncertainty, initial.position_uncertainty)
+        self.assertEqual(idle.yaw_uncertainty, initial.yaw_uncertainty)
+        self.assertEqual(first_pose.position_uncertainty, initial.position_uncertainty)
+        self.assertEqual(first_pose.yaw_uncertainty, initial.yaw_uncertainty)
+
     def test_local_odometry_initializes_and_propagates(self) -> None:
         fusion = core()
         first = fusion.process(FusionInput(0.0, local_odom=odom(0.0, timestamp=0.0)))

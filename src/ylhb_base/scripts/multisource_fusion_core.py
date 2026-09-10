@@ -460,7 +460,11 @@ class MultisourceFusionCore:
         if not _finite(event.now):
             return self._output(event.now, INITIALIZING, None, False, ("INVALID_NOW",))
         reasons: list[str] = []
-        if self._last_process_time is not None:
+        # Process-noise growth only has meaning after a pose exists.  The node
+        # may run for hours before bringup publishes the first odometry sample;
+        # charging uncertainty during that idle period poisons the first real
+        # fusion result even though no state has been initialized yet.
+        if self._last_process_time is not None and self._map_pose is not None:
             if event.now < self._last_process_time:
                 reasons.append("FUSION_TIME_REVERSED")
             else:
