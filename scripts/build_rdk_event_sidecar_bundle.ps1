@@ -46,7 +46,8 @@ foreach ($item in $files) {
 }
 
 $recordPath = Join-Path $stage "BUNDLE_RECORD.json"
-@{
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$recordJson = @{
     schema_version = 1
     source_commit = (git -C $repo rev-parse HEAD).Trim()
     source_branch = (git -C $repo branch --show-current).Trim()
@@ -55,13 +56,16 @@ $recordPath = Join-Path $stage "BUNDLE_RECORD.json"
     publishes_motion_commands = $false
     payload_files = @($files.Target)
     checksum_manifest = "manifest.sha256"
-} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $recordPath -Encoding utf8
+} | ConvertTo-Json -Depth 4
+$recordJson = $recordJson -replace "`r`n", "`n"
+[System.IO.File]::WriteAllText($recordPath, $recordJson + "`n", $utf8NoBom)
 
 $manifestRows = foreach ($file in Get-ChildItem -LiteralPath $stage -File | Sort-Object Name) {
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
     "$hash  $($file.Name)"
 }
-$manifestRows | Set-Content -LiteralPath (Join-Path $stage "manifest.sha256") -Encoding ascii
+$manifestText = ($manifestRows -join "`n") + "`n"
+[System.IO.File]::WriteAllText((Join-Path $stage "manifest.sha256"), $manifestText, [System.Text.Encoding]::ASCII)
 
 Push-Location $OutputDirectory
 try {
@@ -70,7 +74,8 @@ try {
     Pop-Location
 }
 $archiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
-"$archiveHash  $(Split-Path -Leaf $archive)" | Set-Content -LiteralPath $checksum -Encoding ascii
+$checksumText = "$archiveHash  $(Split-Path -Leaf $archive)`n"
+[System.IO.File]::WriteAllText($checksum, $checksumText, [System.Text.Encoding]::ASCII)
 Write-Output "RDK_EVENT_SIDECAR_DIR=$stage"
 Write-Output "RDK_EVENT_SIDECAR_ARCHIVE=$archive"
 Write-Output "RDK_EVENT_SIDECAR_SHA256=$archiveHash"
