@@ -239,6 +239,7 @@ def main(args=None):
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
     from rclpy.duration import Duration
+    from rclpy.executors import ExternalShutdownException
     from rclpy.node import Node
     from sensor_msgs.msg import LaserScan
     from nav_msgs.msg import OccupancyGrid
@@ -575,11 +576,11 @@ def main(args=None):
     node = ScanMapRelocalizationNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

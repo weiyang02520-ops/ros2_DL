@@ -67,6 +67,21 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         self.assertIn('"SYNTHETIC_CONTRACT_FIXTURE"', text)
         self.assertIn('"source_kind": self._source_kind', text)
 
+    def test_runtime_nodes_tolerate_rclpy_external_shutdown(self) -> None:
+        for name in (
+            "active_relocalization_node.py",
+            "gnss_quality_node.py",
+            "navigation_health_node.py",
+            "lidar_robust_node.py",
+            "multisource_fusion_node.py",
+            "scan_map_relocalization_node.py",
+            "auxiliary_sensor_replay_node.py",
+            "event_feature_node.py",
+        ):
+            text = (SCRIPTS / name).read_text(encoding="utf-8")
+            self.assertIn("ExternalShutdownException", text, name)
+            self.assertIn("rclpy.try_shutdown()", text, name)
+
     def test_core_defines_required_modes_and_outputs(self) -> None:
         text = (SCRIPTS / "multisource_fusion_core.py").read_text(encoding="utf-8")
         for value in (

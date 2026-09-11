@@ -91,6 +91,19 @@ start_group "${output_dir}/scan_publisher.log" ros2 topic pub --rate 10 /dg/smok
 capture_topic() {
   local topic="$1"
   local destination="$2"
+  local topic_type=""
+  local deadline=$((SECONDS + 15))
+  while [ "${SECONDS}" -lt "${deadline}" ]; do
+    topic_type="$(ros2 topic type "${topic}" 2>/dev/null || true)"
+    if [ -n "${topic_type}" ]; then
+      break
+    fi
+    sleep 0.2
+  done
+  if [ -z "${topic_type}" ]; then
+    echo "Topic ${topic} was not discovered within 15 seconds" >&2
+    return 1
+  fi
   if ! timeout 15 ros2 topic echo "${topic}" --once >"${destination}" 2>&1; then
     echo "Timed out waiting for ${topic}; see ${destination}" >&2
     return 1

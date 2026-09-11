@@ -209,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments, ros_arguments = build_parser().parse_known_args(argv)
     try:
         import rclpy
+        from rclpy.executors import ExternalShutdownException
     except ImportError:
         print("ROS2/rclpy is required for the event feature node", file=sys.stderr)
         return 2
@@ -216,11 +217,11 @@ def main(argv: list[str] | None = None) -> int:
     node = create_node(arguments.node_name)
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
     return 0
 
 

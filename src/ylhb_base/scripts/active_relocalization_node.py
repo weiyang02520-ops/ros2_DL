@@ -144,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def create_node(node_name: str) -> Any:
+    import rclpy
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
     from nav_msgs.msg import Odometry
@@ -651,7 +652,8 @@ def create_node(node_name: str) -> Any:
             self._status_pub.publish(array)
 
         def destroy_node(self) -> bool:
-            self._publish_zero()
+            if rclpy.ok():
+                self._publish_zero()
             return super().destroy_node()
 
     return ActiveRelocalizationNode()
@@ -662,6 +664,7 @@ def main(argv: list[str] | None = None) -> int:
     args, ros_args = parser.parse_known_args(argv)
     try:
         import rclpy
+        from rclpy.executors import ExternalShutdownException
     except ImportError:
         print("ROS2/rclpy is required only for the wrapper node; the core is ROS-independent.", file=sys.stderr)
         return 2
@@ -669,11 +672,11 @@ def main(argv: list[str] | None = None) -> int:
     node = create_node(args.node_name)
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
     return 0
 
 
