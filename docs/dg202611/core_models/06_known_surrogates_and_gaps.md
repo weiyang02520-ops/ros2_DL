@@ -78,11 +78,13 @@ and upgrade path.
 **Status:** `NOT_INTEGRATED`
 
 **What exists:**
-- Nothing (future work)
+- Vendor-neutral payload validation, queue, acknowledgement, timeout/retry,
+  inbound record, and audit contract
+- No vendor frame codec or ROS 2 transport node
 
 **What is needed:**
 - BDS terminal hardware
-- API for sending/receiving short messages
+- Vendor protocol adapter and ROS 2 sending/receiving node
 - Integration into communication stack
 - Use case definition (emergency backup, status reporting)
 
@@ -325,7 +327,7 @@ A surrogate must be upgraded when:
 |---|---|---|---|---|
 | Visual odometry | MODEL-1 | SURROGATE | no real ZED | MEDIUM |
 | UWB ranging | MODEL-1 | SURROGATE | no real UWB hardware | LOW (not in baseline) |
-| BDS short message | MODEL-1 | NOT_INTEGRATED | no BDS terminal | LOW (future work) |
+| BDS short message | MODEL-1 | COMMON_CONTRACT_ONLY | no identified BDS terminal or vendor protocol | HIGH (teacher requirement) |
 | Feature extraction | MODEL-2 | SURROGATE_NOW | none (baseline working) | LOW (may not need upgrade) |
 | Repeatability eval | MODEL-2 | SIMULATION_ONLY | need real data | HIGH (before competition) |
 | Scan-to-map matcher | MODEL-3 | SURROGATE_COMPONENT | none (AMCL functional) | MEDIUM (depends on failure modes) |

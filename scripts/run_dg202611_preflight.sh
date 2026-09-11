@@ -75,6 +75,8 @@ run_check "IMPORT_UWB_INPUT" python3 -c "import uwb_input"
 run_check "IMPORT_AUX_SENSOR_DATA" python3 -c "import auxiliary_sensor_data"
 run_check "IMPORT_EVENT_FEATURE_CORE" python3 -c "import event_feature_core"
 run_check "IMPORT_POINTCLOUD_READER" python3 -c "import pointcloud_reader"
+cd "$REPO_ROOT/scripts"
+run_check "IMPORT_BEIDOU_SHORT_MESSAGE_CONTRACT" python3 -c "import beidou_short_message_interface"
 
 # Step 3: Unit tests
 echo ""
@@ -93,6 +95,7 @@ run_check "EVENT_FEATURE_TEST" python3 -m pytest src/ylhb_base/test/test_event_f
 run_check "POINTCLOUD_READER_TEST" python3 -m pytest src/ylhb_base/test/test_pointcloud_reader.py -v --tb=no
 run_check "AUX_SENSOR_VALIDATION_TEST" python3 -m pytest src/ylhb_base/test/test_auxiliary_sensor_validation.py -v --tb=no
 run_check "AUX_SESSION_TOOL_TEST" python3 -m pytest src/ylhb_base/test/test_auxiliary_session_tool.py -v --tb=no
+run_check "BEIDOU_SHORT_MESSAGE_CONTRACT_TEST" python3 -m pytest src/ylhb_base/test/test_beidou_short_message_contract.py -v --tb=no
 
 # Step 4: System scenarios
 echo ""

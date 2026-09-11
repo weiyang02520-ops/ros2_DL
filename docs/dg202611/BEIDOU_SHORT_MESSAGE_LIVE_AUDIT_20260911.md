@@ -15,6 +15,26 @@ Outdoor end-to-end verification: NOT RUN
 
 这不等于证明学长从未写过代码，只表示代码不在本次可访问的机器人系统、仓库历史或备份中，或者学长所说的是现有 RTK 代码。
 
+## 扫描后的软件准备
+
+在不猜测厂商帧格式的前提下，仓库已经把与具体终端无关的公共逻辑补齐到
+`scripts/beidou_short_message_interface.py`：
+
+- 载荷长度、目的终端和消息编号校验；
+- 待发送队列和传输就绪门控；
+- 真实终端回执到达后才标记 `DELIVERED`；
+- 确认超时、有限次数重试和最终失败；
+- 入站消息记录，以及不直接写明文载荷的十六进制审计记录。
+
+这一层可以本机测试，但它不会打开串口、不会伪造回执，也没有任何厂商协议。
+因此当前准确状态是：
+
+```text
+Common queue/ack/retry contract: IMPLEMENTED_AND_LOCALLY_TESTED
+Vendor transport adapter:       NOT IMPLEMENTED
+Satellite send/receive:          NOT VERIFIED
+```
+
 ## 扫描范围
 
 - `/home/nvidia/ros2_DL` 当前工作树、远端和全部 Git 历史；
@@ -73,4 +93,4 @@ SHA256 414E960A5C6A4B2F2D9FFC14FF67105622587A67F390E80E9DEDFF0E207405D9
 
 > 当前购买的北斗模块是否原生支持北斗短报文收发？请提供完整型号、短报文协议手册、串口参数、天线要求、服务开通方式、发送频率/长度限制和配套接收端说明。
 
-拿到型号和协议后，代码工作包括协议适配、ROS 2 收发接口、发送队列、回执/超时/重试、日志留证和室外端到端验证。在此之前不能把占位文件 `scripts/beidou_short_message_interface.py` 当作实现。
+拿到型号和协议后，还需实现厂商协议适配和 ROS 2 收发节点，再完成室外端到端验证。当前公共队列、回执、超时重试和审计契约不能当作真实卫星通信已经实现。
