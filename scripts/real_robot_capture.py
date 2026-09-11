@@ -143,6 +143,33 @@ def write_json(path: Path, payload: object) -> None:
     temporary.replace(path)
 
 
+TEACHER_REQUIREMENT_IDS = {
+    "POSITION_CONCURRENT_DEGRADATION",
+    "DYNAMIC_FEATURE_REPEATABILITY",
+    "RELOCALIZATION_ROBUSTNESS",
+    "BEIDOU_SHORT_MESSAGE_BIDIRECTIONAL",
+}
+
+
+def load_teacher_protocol(path: str | Path) -> dict[str, object]:
+    """Load the protocol frozen before a teacher-requirement capture."""
+
+    protocol_path = Path(path).expanduser().resolve()
+    payload = json.loads(protocol_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("teacher protocol must be a JSON object")
+    if payload.get("schema_version") != 1:
+        raise ValueError("teacher protocol schema_version must be 1")
+    requirement_id = str(payload.get("requirement_id", "")).strip()
+    if requirement_id not in TEACHER_REQUIREMENT_IDS:
+        raise ValueError(f"unsupported teacher requirement_id: {requirement_id!r}")
+    if payload.get("evidence_source") != "REAL_HARDWARE":
+        raise ValueError("teacher protocol evidence_source must be REAL_HARDWARE")
+    if payload.get("operator_observed") is not True:
+        raise ValueError("teacher protocol operator_observed must be true")
+    return payload
+
+
 def git_snapshot(repository: Path) -> dict[str, object]:
     def git(*arguments: str) -> str | None:
         try:
@@ -300,6 +327,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ground-truth-y", type=float)
     parser.add_argument("--ground-truth-z", type=float)
     parser.add_argument("--ground-truth-frame", default="map")
+    parser.add_argument(
+        "--teacher-protocol",
+        help="JSON protocol frozen before capture for one teacher requirement",
+    )
     parser.add_argument("--repo", default=str(Path(__file__).resolve().parents[1]))
     return parser
 
@@ -331,6 +362,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         ground_truth_values.append(arguments.ground_truth_z)
     if all(ground_truth_supplied) and not all(math.isfinite(value) for value in ground_truth_values):
         raise SystemExit("ground-truth coordinates must be finite")
+    teacher_protocol = None
+    teacher_protocol_source = None
+    if arguments.teacher_protocol:
+        try:
+            protocol_path = Path(arguments.teacher_protocol).expanduser().resolve()
+            teacher_protocol = load_teacher_protocol(protocol_path)
+            teacher_protocol_source = {
+                "source_filename": protocol_path.name,
+                "source_sha256": sha256_file(protocol_path),
+            }
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"ERROR: invalid teacher protocol: {error}", file=sys.stderr)
+            return 2
+
     if shutil.which("ros2") is None:
         print("ERROR: ros2 is unavailable; source the ROS 2 and integration workspaces first.", file=sys.stderr)
         return 2
@@ -380,6 +425,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ground_truth_z": arguments.ground_truth_z,
             "ground_truth_frame": arguments.ground_truth_frame,
         },
+        "teacher_protocol": teacher_protocol,
+        "teacher_protocol_source": teacher_protocol_source,
         "safety": {
             "publishes_motion_commands": False,
             "requires_human_supervision_for_motion": True,
@@ -387,6 +434,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
     }
     write_json(session / "metadata.json", metadata)
+    if teacher_protocol is not None:
+        write_json(session / "teacher_protocol.json", teacher_protocol)
 
     snapshot_results: dict[str, int] = {}
     for filename, command in SNAPSHOT_COMMANDS.items():
@@ -586,6 +635,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "rosbag_present": bag_path.exists(),
         "rosbag_metadata_present": bag_metadata.is_file(),
         "snapshot_return_codes": snapshot_results,
+        "teacher_protocol_present": teacher_protocol is not None,
+        "teacher_requirement_id": (
+            None if teacher_protocol is None else teacher_protocol.get("requirement_id")
+        ),
         "error": capture_error,
         "claim_boundary": "Capture completion is not a performance result; evaluation is required.",
     }

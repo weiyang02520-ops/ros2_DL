@@ -109,6 +109,7 @@ echo ""
 echo "===STEP 5: EVALUATOR TESTS==="
 run_check "POSITION_EVALUATOR_TEST" python3 -m pytest src/ylhb_base/test/test_position_error_evaluator.py -v --tb=no
 run_check "REAL_ROBOT_CAPTURE_TEST" python3 -m pytest src/ylhb_base/test/test_real_robot_capture.py -v --tb=no
+run_check "TEACHER_REQUIREMENTS_EVALUATOR_TEST" python3 -m pytest src/ylhb_base/test/test_teacher_requirements_evaluator.py -v --tb=no
 
 # Step 6: Evaluator import checks
 echo ""
@@ -120,6 +121,7 @@ run_check "IMPORT_RELOC_EVAL" python3 -c "import relocalization_evaluator"
 run_check "IMPORT_EXP_LOGGER" python3 -c "import experiment_logger"
 run_check "IMPORT_SESSION_TOOL" python3 -c "import experiment_session_tool"
 run_check "IMPORT_CAPTURE_EVAL" python3 -c "import evaluate_real_robot_sessions"
+run_check "IMPORT_TEACHER_REQUIREMENTS_EVAL" python3 -c "import teacher_requirements_evaluator"
 run_check "IMPORT_STRUCTURED_CAPTURE" python3 -c "import sys; sys.path.insert(0, '../src/ylhb_base/scripts'); import evidence_capture_node"
 
 # Final summary

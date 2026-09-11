@@ -11,6 +11,7 @@ if str(SCRIPTS) not in sys.path:
 from real_robot_capture import (  # noqa: E402
     DEFAULT_TOPICS,
     build_manifest,
+    load_teacher_protocol,
     sanitize_label,
     unique_topics,
     write_json,
@@ -158,3 +159,29 @@ def test_structured_capture_preserves_features_and_one_terminal_event_per_attemp
         "failure_reason": "",
     }
     assert tracker.consume(recovered, 13.1) is None
+
+
+def test_teacher_protocol_is_validated_before_capture(tmp_path):
+    protocol = {
+        "schema_version": 1,
+        "requirement_id": "DYNAMIC_FEATURE_REPEATABILITY",
+        "evidence_source": "REAL_HARDWARE",
+        "operator_observed": True,
+        "conditions": {
+            "robot_stationary": True,
+            "dynamic_target_present": True,
+            "dynamic_filter_enabled": True,
+        },
+    }
+    path = tmp_path / "protocol.json"
+    path.write_text(json.dumps(protocol), encoding="utf-8")
+    assert load_teacher_protocol(path) == protocol
+
+    protocol["evidence_source"] = "SYNTHETIC"
+    path.write_text(json.dumps(protocol), encoding="utf-8")
+    try:
+        load_teacher_protocol(path)
+    except ValueError as error:
+        assert "REAL_HARDWARE" in str(error)
+    else:
+        raise AssertionError("synthetic teacher evidence must be rejected")
