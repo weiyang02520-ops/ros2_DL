@@ -1,101 +1,164 @@
-# RDK X5 事件相机启动准备
+# RDK X5 事件相机启动与接入
 
-## 先确认硬件组合
+## 当前结论（2026-09-11）
 
-RDK X5 只是运行事件相机驱动的计算板。EVS 模组、MIPI 排线和正确的系统镜像仍然是必需项；厂商的 RDK X5 适配页以 EVS_003 为例，默认接到靠近网口的 CAM1 接口。官方清单还列出 5V/3A 以上电源、32GB 以上 Class 10 SD 卡，HDMI 显示器用于现场观察。硬件连接前先断电，排线插入后再通电。
+事件相机的软件接入路线可以继续，当前状态是：
 
-当前 DG 工作区已经准备好通用 ROS 2 侧链：
+- **DG 侧车软件已准备好**：能够校验事件字段、回放真实 CSV、提取事件特征并输出质量统计；
+- **RDK X5 上已有 APX003CC 厂商栈**：存在传感器库、EVS 实时采集示例以及 RAW8、EVT2、CSV 转换工具；
+- **真实事件流尚未取得**：当前没有 `/dev/video*`、`/dev/media*` 或 `/dev/v4l-subdev*`；
+- **真正阻塞点是启动配置**：APX003CC overlay 当前没有生效，而且 CAM1 overlay 指向的 I2C 控制器与此前看到 `0x3c` 应答的控制器尚未对应上。
 
-```text
-EVS 原始事件流 -> /dg/event_camera/events -> event_feature_node
-                                      -> /dg/event_camera/features
-                                      -> /dg/event_camera/feature_quality
+因此，不能再把问题写成“缺 APX003CC 驱动”，也不能把现在的状态写成事件相机实机通过。下一步要先确认 CAM1、Linux I2C 编号和 overlay 的真实对应关系，再备份并修改启动配置。
+
+## 已确认的板端资源
+
+当前板端为 RDK X5 V1.0、RDK OS 3.4.1、Ubuntu 22.04、Linux 6.1.83，TROS Humble 环境位于：
+
+```bash
+/opt/tros/humble/setup.bash
 ```
 
-这个侧链要求输入 `PointCloud2` 的字段为 `pixel_x`、`pixel_y`、`polarity`、`time_offset_us`，坐标系默认是 `event_camera_optical_frame`。它只做观测和特征质量统计，不接管底盘，也不发布 `/cmd_vel`。
+APX003CC 传感器库：
+
+```text
+/usr/hobot/lib/sensor/libapx003cc.so
+/usr/hobot/lib/sensor/libapx003cc.so.1
+/usr/hobot/lib/sensor/libapx003cc.so.1.0.0
+```
+
+厂商样例根目录：
+
+```text
+/app/multimedia_samples/sample_apx003cc
+```
+
+已经确认的关键程序和源码包括：
+
+```text
+sample_evs_release/evs_mode/01_evs_live_player/evs_live_player.RAW8
+sample_evs_release/evs_mode/04_raw8_to_evt2/raw8_to_evt2.cpp
+sample_evs_release/evs_mode/02_evt2_to_csv/evt2_to_csv
+sample_hvs/
+```
+
+系统同时带有 CAM0 和 CAM1 的 APX003CC overlay。CAM1 overlay 描述的传感器地址是 `0x3c`，使用 4 条 CSI 数据通道，但该 overlay 当前未进入活动设备树。
+
+## 已确认的事件数据契约
+
+厂商工具最终使用 `Metavision::EventCD`：
+
+```text
+x          像素横坐标
+y          像素纵坐标
+p          极性，0 或 1
+t          时间戳，单位为微秒
+```
+
+已确认的 EVS 有效尺寸为 `768 × 608`。厂商 RAW8 解析代码按每个 MIPI 包 `1,048,576` 字节处理，每包包含 32 个子帧；解析后可以转换成 EVT2。EVT2 事件使用 32 位字，随后可用厂商工具导出：
+
+```text
+x,y,polarity,timestamp
+```
+
+DG 侧车的 ROS 2 输入是 `sensor_msgs/msg/PointCloud2`，字段对应为：
+
+```text
+pixel_x,pixel_y,polarity,time_offset_us
+```
+
+其中 `time_offset_us` 是相对于该 ROS 消息头时间戳的微秒偏移。CSV 转 ROS 时必须保持时间顺序，并记录原始文件 SHA-256、采集时间和转换命令。
+
+## DG 双机接入结构
+
+```text
+APX003CC + 厂商采集程序（RDK X5）
+  -> RAW8 / EVT2 / x,y,polarity,timestamp CSV
+  -> DG wrapper
+  -> /dg/event_camera/events
+  -> event_feature_node（RDK X5）
+  -> /dg/event_camera/features
+  -> /dg/event_camera/feature_quality
+  -> 局域网 DDS
+  -> Jetson 记录、显示并提供给后续模型验证
+```
+
+事件原始流和特征提取优先留在 RDK X5，Jetson 只接收低带宽特征和质量信息。两块板联调时使用相同的 `ROS_DOMAIN_ID`。该侧链不发布 `/cmd_vel`，不接管机器人底盘。
 
 ## 第一步：只读探测
 
-在 RDK X5 上运行：
+进入侧车包解压目录后运行：
 
 ```bash
-cd ~/dg202611_ws
-bash scripts/probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
+bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 ```
 
-把命令最后打印的 `PROBE_OUTPUT=...` 文件传回 Windows。重点看：
+脚本会自动尝试加载 `/opt/tros/humble/setup.bash`，并记录：
 
-- `/dev/video*`、`/dev/media*`、`/dev/v4l-subdev*` 是否出现；
-- `media-ctl -p` 是否能看到 MIPI/CSI 图；
-- `dmesg` 是否出现 EVS、MIPI、CSI 或传感器识别信息；
-- 当前系统镜像和 EVS 模组型号是否匹配；
-- 是否已经有厂商事件流程序或 ROS 2 节点。
+- 视频、媒体、I2C 设备与活动设备树；
+- APX003CC 传感器库和厂商 EVS 工具；
+- CAM0/CAM1 overlay 的关键目标控制器、地址和 CSI 通道；
+- 当前启动配置中已经启用的 overlay；
+- TROS/ROS 2 环境、话题和相关进程。
 
-脚本是只读的，不改驱动、不改网络、不启动 ROS 运动命令。
+该脚本不会运行 `i2cdetect`，不会加载模块，不会修改 `/boot`，不会重启，也不会发布 ROS 消息。
 
-## 第二步：确认厂商输出
+## 第二步：确认 CAM1 与 overlay 映射
 
-探测到设备后，先不要把它接到机器人。需要记录以下信息：
+当前证据需要解决一个具体矛盾：
 
-1. EVS 模组完整型号和分辨率；
-2. RDK X5 系统镜像版本；
-3. 厂商采集程序或 ROS 2 驱动命令；
-4. 原始事件字段、时间戳单位和坐标系；
-5. 是否能导出 CSV/RAW/ROS bag。
+- 之前看到设备地址 `0x3c` 应答的 Linux I2C 适配器对应活动控制器 `i2c@341d0000`；
+- 当前 `dtoverlay_cam1_apx003cc.dts` 的目标控制器是 `i2c@340f0000`。
 
-如果厂商程序只提供专用事件格式，先写一个只读 wrapper，把数据转换为 DG 的四字段事件格式，再接 `event_feature_node`。不直接修改 `/home/nvidia/ros2_DL`。
+这不等于 overlay 一定错误，也不能仅凭接口丝印猜测 CAM0/CAM1。必须结合板端 `/sys/class/i2c-adapter`、活动设备树、板卡原理图/官方端口定义和实际排线位置确认映射。完成确认之前，不修改启动配置。
 
-## 当前判断
+## 第三步：可回滚地启用相机
 
-本地软件侧已经具备事件数据校验、分包、特征提取和相邻包重复率计算；真正还没完成的是 RDK X5 上的 EVS 驱动识别和一段真实事件数据。只有看到真实设备节点和真实事件包后，才能继续做 ROS 2 实时接入与 MODEL-2/MODEL-3 联调。
+只有第二步确认后才执行：
 
-## 双机运行方式
+1. 保存当前 `/boot/config.txt`、`/boot/config/config.txt`、活动设备树和文件 SHA-256；
+2. 记录 SD 卡镜像版本，并准备可从 Windows 恢复启动分区的办法；
+3. 只启用确认正确的 APX003CC overlay；
+4. 重启后检查设备节点、内核日志和传感器识别结果；
+5. 若设备没有出现或启动异常，立即按备份恢复。
 
-推荐让原始事件流和特征提取都留在 RDK X5，仅把低带宽结果交给 Jetson：
+这一步只能在地瓜派专用任务中按已确认的命令执行，不能试错式轮流启用 CAM0/CAM1。
+
+## 第四步：采集一段真实事件数据
+
+设备正常识别后，先运行厂商 `evs_live_player.RAW8` 的帮助或样例说明，确认参数和输出位置，再采集一段短 RAW8。随后按板端现有工具链完成：
 
 ```text
-APX003CC + 厂商驱动（RDK X5）
-  -> /dg/event_camera/events
-  -> event_feature_node（RDK X5）
-  -> /dg/event_camera/features + /dg/event_camera/feature_quality
-  -> 同一 ROS_DOMAIN_ID / 局域网
-  -> Jetson 记录、显示并参与后续验证
+真实 RAW8 -> raw8_to_evt2 -> EVT2 -> evt2_to_csv -> 真实 CSV
 ```
 
-两块板使用同一个 `ROS_DOMAIN_ID`。Jetson 不订阅原始事件话题时，DDS 不会把整条高带宽事件流传给 Jetson；它只需要订阅特征和诊断。第一次联调不要启用 MODEL-3 运动或速度仲裁器。
+至少保存：
 
-本仓库可生成一个无需编译整套机器人系统的轻量包：
+- 原始 RAW8、EVT2、CSV；
+- 三者 SHA-256；
+- 相机型号、端口、镜像版本、overlay 配置；
+- 采集开始/结束时间、场景和转换命令；
+- 事件数量、频率、时间戳单调性、坐标范围和极性统计。
 
-```powershell
-.\scripts\build_rdk_event_sidecar_bundle.ps1
-```
+## 第五步：接入 DG 侧车
 
-上传并解压到 RDK X5 后，厂商事件发布器启动成功时运行：
-
-```bash
-bash run_rdk_event_feature_sidecar.sh
-```
-
-先验证单个实时事件包：
-
-```bash
-python3 inspect_event_topic.py --timeout-sec 10 --output-json event_topic_probe.json
-```
-
-如果当前只能由厂商工具导出真实 `x,y,polarity,timestamp` CSV，可以先完成真实数据回放链路：
+取得真实 CSV 后可先验证回放链路：
 
 ```bash
 bash run_rdk_event_csv_replay.sh /data/events.csv 50.0 false
 ```
 
-回放会明确标记 `source_kind=MEASURED_REPLAY`，不会冒充实时驱动。
+回放会标记为 `source_kind=MEASURED_REPLAY`。实时 wrapper 准备好后再运行：
 
-## 2026-09-11 当前硬件结论
+```bash
+bash run_rdk_event_feature_sidecar.sh
+python3 inspect_event_topic.py --timeout-sec 10 --output-json event_topic_probe.json
+```
 
-- 地瓜派：RDK X5 V1.0，RDK OS 3.4.1，Ubuntu 22.04，内核 6.1.83；
-- 事件相机插在 CAM1，对应 `mipi_host0 / i2c-6`；
-- `0x3c` 有 I2C 应答，说明排线、电源和设备应答链路已经出现；
-- 镜像中存在 `dtoverlay_cam0_apx003cc.dtbo`，但当前内核模块目录中没有 APX003CC 驱动；
-- `/dev/video*` 为空与“缺内核驱动”一致，当前不能开始真实事件采集。
+验收时必须区分：
 
-`dtoverlay` 只负责把硬件描述交给内核，不能替代缺失的传感器驱动。现在不应先改 `/boot/config/config.txt` 或重启碰运气；应优先向事件相机厂商取得适用于 **RDK OS 3.4.1 / Linux 6.1.83 / APX003CC** 的内核驱动、SDK、安装步骤和事件格式说明。拿到驱动包后先保存原包和 SHA-256，再在地瓜派专用任务中做可回滚安装。
+- `SOFTWARE_READY`：脚本、接口和回放链路可用；
+- `MEASURED_REPLAY_PASS`：真实采集数据已成功回放；
+- `LIVE_HARDWARE_PASS`：真实相机持续输出并经 ROS 2 实时处理。
+
+当前状态是 `SOFTWARE_READY`，尚未达到后两项。
