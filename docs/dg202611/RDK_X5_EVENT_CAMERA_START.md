@@ -146,7 +146,16 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 
 ## 第五步：采集一段真实事件数据
 
-设备正常识别且适配固件验证通过后，按厂商示例使用 `evs_live_player.RAW8`（文档示例索引为 `-s 49`；实际索引仍以板端样例为准）采集一段短 RAW8。随后按板端现有工具链完成：
+设备正常识别且适配固件验证通过后，先在厂商示例目录编译实时采集程序。教程中的 `evs_live_player.RAW8` 是 Makefile 的目标文件，源码包不一定预先带有这个二进制：
+
+```bash
+cd /app/multimedia_samples/sample_apx003cc/sample_evs_release/evs_mode/01_evs_live_player
+make
+ls -lh evs_live_player.RAW8
+file evs_live_player.RAW8
+```
+
+确认生成 `ELF 64-bit` 可执行文件后，再按厂商示例使用 `sudo ./evs_live_player.RAW8 -s 49`（实际索引仍以板端样例为准）采集一段短 RAW8。随后按板端现有工具链完成：
 
 ```text
 真实 RAW8 -> raw8_to_evt2 -> EVT2 -> evt2_to_csv -> 真实 CSV
