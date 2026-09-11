@@ -5,15 +5,18 @@
 事件相机的软件接入路线可以继续，当前状态是：
 
 - **DG 侧车软件已准备好**：能够校验事件字段、回放真实 CSV、提取事件特征并输出质量统计；
-- **RDK X5 上已有 APX003CC 厂商栈**：存在传感器库、EVS 实时采集示例以及 RAW8、EVT2、CSV 转换工具；
+- **RDK X5 上有 APX003CC 用户态资源**：发现传感器 `.so`、EVS 实时采集示例以及 RAW8、EVT2、CSV 转换工具；
+- **官方适配条件仍需核对**：时佩的 RDK X5 适配文档指定适配镜像；官方固件说明同时指出，RDK X5 原厂系统不包含适配的 APX003CC 驱动，必须使用适配固件；
 - **真实事件流尚未取得**：当前没有 `/dev/video*`、`/dev/media*` 或 `/dev/v4l-subdev*`；
-- **真正阻塞点是启动配置**：APX003CC overlay 当前没有生效，而且 CAM1 overlay 指向的 I2C 控制器与此前看到 `0x3c` 应答的控制器尚未对应上。
+- **当前阻塞点是镜像/驱动集成和启动配置**：APX003CC overlay 当前没有进入活动设备树，而且 CAM1 overlay 指向的 I2C 控制器与此前看到 `0x3c` 应答的控制器尚未对应上。
 
-因此，不能再把问题写成“缺 APX003CC 驱动”，也不能把现在的状态写成事件相机实机通过。下一步要先确认 CAM1、Linux I2C 编号和 overlay 的真实对应关系，再备份并修改启动配置。
+所以不能把“有 `.so` 和样例”写成“驱动已就绪”，也不能把现在的状态写成事件相机实机通过。下一步先只读确认当前镜像身份及其是否为时佩适配镜像，再确认 CAM1、Linux I2C 控制器和 overlay 的对应关系；确认后才讨论可回滚的固件或启动配置变更。
 
 ## 已确认的板端资源
 
-当前板端为 RDK X5 V1.0、RDK OS 3.4.1、Ubuntu 22.04、Linux 6.1.83，TROS Humble 环境位于：
+当前板端探测到 RDK X5 V1.0、RDK OS 3.4.1、Ubuntu 22.04、Linux 6.1.83，TROS Humble 环境位于：
+
+官方适配资料给出的目标镜像是 `shimetapi_rdk_x5_3.4.1_0609.img`，并给出了对应 MD5。当前板端尚未完成该镜像文件或可靠版本标识的校验，不能据此假定已经刷入适配镜像。
 
 ```bash
 /opt/tros/humble/setup.bash
@@ -42,7 +45,7 @@ sample_evs_release/evs_mode/02_evt2_to_csv/evt2_to_csv
 sample_hvs/
 ```
 
-系统同时带有 CAM0 和 CAM1 的 APX003CC overlay。CAM1 overlay 描述的传感器地址是 `0x3c`，使用 4 条 CSI 数据通道，但该 overlay 当前未进入活动设备树。
+系统同时带有 CAM0 和 CAM1 的 APX003CC overlay。CAM1 overlay 描述的传感器地址是 `0x3c`，使用 4 条 CSI 数据通道，但该 overlay 当前未进入活动设备树。overlay 文件和用户态库的存在只能说明资源在系统中，不能证明内核驱动和 CSI 链路已正确注册。
 
 ## 已确认的事件数据契约
 
@@ -103,7 +106,11 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 
 该脚本不会运行 `i2cdetect`，不会加载模块，不会修改 `/boot`，不会重启，也不会发布 ROS 消息。
 
-## 第二步：确认 CAM1 与 overlay 映射
+## 第二步：先确认镜像和登录环境
+
+时佩适配页给出的登录方式是：串口 115200，用户 `sunrise`；SSH 使用 `sunrise@<板端 IP>`。板端当前应先记录系统版本、适配镜像标识和启动分区文件，核对是否属于时佩适配镜像。官方固件说明明确要求 RDK X5 使用适配固件后才验证 APX003CC 识别和双流采集，因此不能跳过这一核对直接改 overlay。
+
+## 第三步：确认 CAM1 与 overlay 映射
 
 当前证据需要解决一个具体矛盾：
 
@@ -112,9 +119,9 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 
 这不等于 overlay 一定错误，也不能仅凭接口丝印猜测 CAM0/CAM1。必须结合板端 `/sys/class/i2c-adapter`、活动设备树、板卡原理图/官方端口定义和实际排线位置确认映射。完成确认之前，不修改启动配置。
 
-## 第三步：可回滚地启用相机
+## 第四步：在确认适配条件后可回滚地启用相机
 
-只有第二步确认后才执行：
+只有镜像条件和 CAM1 映射都确认后才执行：
 
 1. 保存当前 `/boot/config.txt`、`/boot/config/config.txt`、活动设备树和文件 SHA-256；
 2. 记录 SD 卡镜像版本，并准备可从 Windows 恢复启动分区的办法；
@@ -124,9 +131,9 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 
 这一步只能在地瓜派专用任务中按已确认的命令执行，不能试错式轮流启用 CAM0/CAM1。
 
-## 第四步：采集一段真实事件数据
+## 第五步：采集一段真实事件数据
 
-设备正常识别后，先运行厂商 `evs_live_player.RAW8` 的帮助或样例说明，确认参数和输出位置，再采集一段短 RAW8。随后按板端现有工具链完成：
+设备正常识别且适配固件验证通过后，按厂商示例使用 `evs_live_player.RAW8`（文档示例索引为 `-s 49`；实际索引仍以板端样例为准）采集一段短 RAW8。随后按板端现有工具链完成：
 
 ```text
 真实 RAW8 -> raw8_to_evt2 -> EVT2 -> evt2_to_csv -> 真实 CSV
@@ -140,7 +147,7 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 - 采集开始/结束时间、场景和转换命令；
 - 事件数量、频率、时间戳单调性、坐标范围和极性统计。
 
-## 第五步：接入 DG 侧车
+## 第六步：接入 DG 侧车
 
 取得真实 CSV 后可先验证回放链路：
 
@@ -162,3 +169,11 @@ python3 inspect_event_topic.py --timeout-sec 10 --output-json event_topic_probe.
 - `LIVE_HARDWARE_PASS`：真实相机持续输出并经 ROS 2 实时处理。
 
 当前状态是 `SOFTWARE_READY`，尚未达到后两项。
+
+## 参考资料
+
+- 时佩《RDK X5 载板适配》：硬件连接、CAM1 默认端口、登录方式和 EVS 示例；
+- 时佩《设备固件烧录》：RDK X5 原厂系统与 APX003CC 适配固件的边界；
+- 时佩 EVS 环境配置页：镜像名称、校验值和登录环境。
+
+这三份资料只作为操作依据。任何刷写固件、修改启动配置或重启动作，都要先在地瓜派专用任务里完成当前状态备份，并确认恢复路径。
