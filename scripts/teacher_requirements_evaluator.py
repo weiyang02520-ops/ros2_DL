@@ -78,10 +78,18 @@ class SessionEvidence:
     protocol: dict[str, Any] | None
     manifest_valid: bool
     manifest_errors: list[str]
+    manifest_paths: set[str]
 
     @property
     def requirement_id(self) -> str:
         return str((self.protocol or {}).get("requirement_id", ""))
+
+    def manifest_includes(self, relative_path: str) -> bool:
+        return Path(relative_path).as_posix() in self.manifest_paths
+
+    def require_manifest_file(self, relative_path: str, errors: list[str]) -> None:
+        if not self.manifest_includes(relative_path):
+            errors.append(f"证据文件未纳入 SHA256 清单：{relative_path}")
 
     @property
     def base_errors(self) -> list[str]:
@@ -98,6 +106,9 @@ class SessionEvidence:
             errors.append("result 未确认 rosbag metadata.yaml 存在")
         if not (self.path / "rosbag" / "metadata.yaml").is_file():
             errors.append("缺少原始 rosbag/metadata.yaml")
+        self.require_manifest_file("metadata.json", errors)
+        self.require_manifest_file("result.json", errors)
+        self.require_manifest_file("rosbag/metadata.yaml", errors)
         if not self.manifest_valid:
             errors.extend(f"清单校验失败：{item}" for item in self.manifest_errors)
         if not isinstance(self.protocol, dict):
@@ -134,6 +145,13 @@ def load_sessions(root: Path) -> list[SessionEvidence]:
             metadata = read_json(session / "metadata.json")
             result = read_json(session / "result.json")
             valid, errors = verify_manifest(session)
+            manifest = read_json(session / "manifest.json")
+            entries = manifest.get("files", [])
+            manifest_paths = {
+                str(entry.get("path", ""))
+                for entry in entries
+                if isinstance(entry, dict) and str(entry.get("path", "")).strip()
+            }
             protocol = _read_protocol(session, metadata)
         except (OSError, ValueError, json.JSONDecodeError) as error:
             sessions.append(
@@ -145,6 +163,7 @@ def load_sessions(root: Path) -> list[SessionEvidence]:
                     protocol=None,
                     manifest_valid=False,
                     manifest_errors=[f"会话不可读：{error}"],
+                    manifest_paths=set(),
                 )
             )
             continue
@@ -157,6 +176,7 @@ def load_sessions(root: Path) -> list[SessionEvidence]:
                 protocol=protocol,
                 manifest_valid=valid,
                 manifest_errors=errors,
+                manifest_paths=manifest_paths,
             )
         )
     return sessions
@@ -271,6 +291,9 @@ def evaluate_position(
     concurrent_samples = 0
     for session in candidates:
         session_reasons = list(session.base_errors)
+        session.require_manifest_file("teacher_protocol.json", session_reasons)
+        session.require_manifest_file("structured/diagnostic_samples.csv", session_reasons)
+        session.require_manifest_file("structured/position_samples.csv", session_reasons)
         protocol = session.protocol or {}
         conditions = _dict(protocol.get("conditions"))
         truth = _dict(protocol.get("ground_truth"))
@@ -366,6 +389,9 @@ def evaluate_features(
     dynamic_totals = {"dynamic_candidate_count": 0, "auxiliary_dynamic_point_count": 0}
     for session in candidates:
         session_reasons = list(session.base_errors)
+        session.require_manifest_file("teacher_protocol.json", session_reasons)
+        session.require_manifest_file("structured/lidar_quality.csv", session_reasons)
+        session.require_manifest_file("structured/lidar_features.csv", session_reasons)
         conditions = _dict((session.protocol or {}).get("conditions"))
         _bool_field(conditions, "robot_stationary", session_reasons, "conditions")
         _bool_field(conditions, "dynamic_target_present", session_reasons, "conditions")
@@ -444,6 +470,8 @@ def evaluate_relocalization(
     trigger_classes: set[str] = set()
     for session in candidates:
         session_reasons = list(session.base_errors)
+        session.require_manifest_file("teacher_protocol.json", session_reasons)
+        session.require_manifest_file("structured/relocalization_events.csv", session_reasons)
         conditions = _dict((session.protocol or {}).get("conditions"))
         _bool_field(conditions, "controlled_real_trial", session_reasons, "conditions")
         _bool_field(conditions, "operator_supervised", session_reasons, "conditions")
@@ -550,6 +578,8 @@ def evaluate_beidou(
     cycles = 0
     for session in candidates:
         session_reasons = list(session.base_errors)
+        session.require_manifest_file("teacher_protocol.json", session_reasons)
+        session.require_manifest_file("structured/beidou_short_message_events.csv", session_reasons)
         protocol = session.protocol or {}
         conditions = _dict(protocol.get("conditions"))
         for field in (
@@ -570,6 +600,8 @@ def evaluate_beidou(
                 candidate = (session.path / relative).resolve()
                 if session.path.resolve() not in candidate.parents or not candidate.is_file():
                     session_reasons.append(f"{field} 指向的原始日志不存在或越界")
+                else:
+                    session.require_manifest_file(Path(relative).as_posix(), session_reasons)
         events_path = session.path / "structured" / "beidou_short_message_events.csv"
         valid_cycles = 0
         if not events_path.is_file():

@@ -83,6 +83,71 @@ def test_empty_capture_root_never_claims_a_requirement_pass(tmp_path):
     assert {item["status"] for item in summary["requirements"]} == {"NOT_PROVEN"}
 
 
+def test_unlisted_critical_file_is_rejected_even_when_remaining_hashes_match(tmp_path):
+    protocol = base_protocol(POSITION_REQUIREMENT)
+    protocol.update(
+        {
+            "conditions": {
+                "gnss_bds_interruption": True,
+                "lidar_degradation": True,
+                "concurrent": True,
+            },
+            "ground_truth": {
+                "independent_xy": True,
+                "independent_z": True,
+                "method": "surveyed point",
+                "coordinate_frame": "map",
+            },
+        }
+    )
+    diagnostic = {
+        "received_timestamp": 100.0,
+        "message_timestamp": 100.0,
+        "topic": "/dg/navigation/status",
+        "status_name": "DG Navigation Health",
+        "level": 1,
+        "message": "DEGRADED",
+        "values_json": json.dumps(
+            {"timestamp": 100.0, "gnss_state": "REJECTED", "lidar_state": "DEGRADED"}
+        ),
+    }
+    position = {
+        "timestamp": 100.0,
+        "estimated_x": 1.0,
+        "estimated_y": 2.0,
+        "estimated_z": 0.5,
+        "ground_truth_x": 1.0,
+        "ground_truth_y": 2.0,
+        "ground_truth_z": 0.5,
+        "coordinate_frame": "map",
+        "source_topic": "/dg/fusion/pose",
+    }
+    session = create_session(
+        tmp_path,
+        "unlisted-position",
+        protocol,
+        [
+            ("structured/diagnostic_samples.csv", list(diagnostic), [diagnostic]),
+            ("structured/position_samples.csv", list(position), [position]),
+        ],
+    )
+    manifest_path = session / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = [
+        item for item in manifest["files"]
+        if item["path"] != "structured/position_samples.csv"
+    ]
+    write_json(manifest_path, manifest)
+
+    summary = evaluate_all(tmp_path, minimum_position_samples=1)
+    position_result = next(
+        item for item in summary["requirements"]
+        if item["requirement_id"] == POSITION_REQUIREMENT
+    )
+    assert position_result["status"] == "INCOMPLETE_EVIDENCE"
+    assert any("未纳入 SHA256 清单" in reason for reason in position_result["reasons"])
+
+
 def test_complete_traceable_sessions_can_pass_all_four_requirements(tmp_path):
     protocol = base_protocol(POSITION_REQUIREMENT)
     protocol.update(

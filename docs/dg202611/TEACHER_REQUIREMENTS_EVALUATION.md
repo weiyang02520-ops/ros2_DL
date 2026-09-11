@@ -19,7 +19,7 @@
 ./scripts/run_real_robot_capture.sh   --scenario <场景编号>   --duration <秒数>   --teacher-protocol /绝对路径/本次协议.json   <其他参数>
 ```
 
-采集器会把协议内容和源文件 SHA256 写入 `metadata.json`，同时复制为会话内的 `teacher_protocol.json`。看完结果后不能改协议；任何修改都会破坏会话清单校验。
+采集器会把协议内容和源文件 SHA256 写入 `metadata.json`，同时复制为会话内的 `teacher_protocol.json`。关键协议、原始 rosbag、结构化 CSV 和终端日志还必须被会话 `manifest.json` 的 SHA-256 清单覆盖。看完结果后不能改协议；任何修改都会破坏会话清单校验。
 
 ## 四项要求各自需要什么
 
