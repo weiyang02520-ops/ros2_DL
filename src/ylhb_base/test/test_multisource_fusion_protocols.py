@@ -13,6 +13,8 @@ CMAKE = ROOT / "CMakeLists.txt"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from ros_shutdown import cleanup_ros_node  # noqa: E402
+
 from auxiliary_sensor_data import (  # noqa: E402
     iter_event_packets,
     iter_mmwave_frames,
@@ -80,7 +82,24 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         ):
             text = (SCRIPTS / name).read_text(encoding="utf-8")
             self.assertIn("ExternalShutdownException", text, name)
-            self.assertIn("rclpy.try_shutdown()", text, name)
+            self.assertIn("cleanup_ros_node(node, rclpy)", text, name)
+
+    def test_cleanup_tolerates_sigint_during_node_and_context_shutdown(self) -> None:
+        calls: list[str] = []
+
+        class InterruptingNode:
+            def destroy_node(self) -> None:
+                calls.append("destroy_node")
+                raise KeyboardInterrupt
+
+        class InterruptingRclpy:
+            @staticmethod
+            def try_shutdown() -> None:
+                calls.append("try_shutdown")
+                raise KeyboardInterrupt
+
+        cleanup_ros_node(InterruptingNode(), InterruptingRclpy())
+        self.assertEqual(calls, ["destroy_node", "try_shutdown"])
 
     def test_core_defines_required_modes_and_outputs(self) -> None:
         text = (SCRIPTS / "multisource_fusion_core.py").read_text(encoding="utf-8")
@@ -214,6 +233,7 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
 
     def test_cmake_installs_wrapper_and_registers_new_tests(self) -> None:
         text = CMAKE.read_text(encoding="utf-8")
+        self.assertIn("scripts/ros_shutdown.py", text)
         self.assertIn("scripts/multisource_fusion_core.py", text)
         self.assertIn("scripts/multisource_fusion_node.py", text)
         self.assertIn("scripts/auxiliary_sensor_data.py", text)

@@ -105,6 +105,7 @@ install(PROGRAMS
   scripts/vision_node.py
   scripts/auto_align.py
   scripts/diagnostic_level.py
+  scripts/ros_shutdown.py
   scripts/lidar_robust_features.py
   scripts/gnss_quality_gate.py
   scripts/active_relocalization_core.py

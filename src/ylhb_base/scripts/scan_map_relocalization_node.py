@@ -7,6 +7,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+from ros_shutdown import cleanup_ros_node
+
 
 class MatchScore(NamedTuple):
     score: float
@@ -579,8 +581,7 @@ def main(args=None):
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+        cleanup_ros_node(node, rclpy)
 
 
 if __name__ == "__main__":

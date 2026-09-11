@@ -20,6 +20,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from ros_shutdown import cleanup_ros_node  # noqa: E402
 from active_relocalization_core import (  # noqa: E402
     ActiveRelocalizationConfig,
     ActiveRelocalizationController,
@@ -675,8 +676,7 @@ def main(argv: list[str] | None = None) -> int:
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        node.destroy_node()
-        rclpy.try_shutdown()
+        cleanup_ros_node(node, rclpy)
     return 0
 
 
