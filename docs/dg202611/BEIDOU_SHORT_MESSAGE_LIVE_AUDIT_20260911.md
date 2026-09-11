@@ -57,6 +57,8 @@ SHA256 414E960A5C6A4B2F2D9FFC14FF67105622587A67F390E80E9DEDFF0E207405D9
 
 机器人识别到 AirM2M 复合 USB 设备和多个 CDC ACM 串口。其中一个端口输出 NMEA，另一个端口显示蜂窝网络/LuatOS 状态。该证据支持“RTK/GNSS + 4G/NTRIP”链路，不能证明存在北斗短报文终端。
 
+2026-09-11 进一步核对了 WITMOTION 官方 WTRTK 产品页：WTRTK-980 被列为全星座高精度 RTK/GNSS 定位模块，公开功能和配套资料指向 UM980、NMEA、基站/移动站与 NTRIP，没有列出卫星短报文收发能力。该公开资料与实机代码结论一致，但仍不能代替学长提供隐藏代码路径或另一块短报文硬件的证据：<https://witmotion-sensor.com/products/rtk-gps-gnss-modules-centimeter-level-um982-um980-um960>
+
 ## 为什么不能直接补一段软件
 
 北斗短报文能力首先取决于模块本身是否支持卫星短报文、是否开通服务、是否有对应天线和账号/卡号，然后才是串口协议和上层程序。普通 GNSS/RTK 板、4G 模块、NTRIP 链路不能通过修改 Python 或 ROS 2 代码变成北斗短报文终端。

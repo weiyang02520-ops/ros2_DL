@@ -91,6 +91,8 @@ run_check "INTEGRATION_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_
 run_check "AUX_SENSOR_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_multisource_fusion_protocols.py -v --tb=no
 run_check "EVENT_FEATURE_TEST" python3 -m pytest src/ylhb_base/test/test_event_feature_core.py -v --tb=no
 run_check "POINTCLOUD_READER_TEST" python3 -m pytest src/ylhb_base/test/test_pointcloud_reader.py -v --tb=no
+run_check "AUX_SENSOR_VALIDATION_TEST" python3 -m pytest src/ylhb_base/test/test_auxiliary_sensor_validation.py -v --tb=no
+run_check "AUX_SESSION_TOOL_TEST" python3 -m pytest src/ylhb_base/test/test_auxiliary_session_tool.py -v --tb=no
 
 # Step 4: System scenarios
 echo ""

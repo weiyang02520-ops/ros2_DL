@@ -149,6 +149,8 @@ ros2 topic info /cmd_vel -v
 
 ## 到货后的最小数据集
 
+完整的一次性目录、26 个 trial、现场记录字段和关闭硬件阶段的条件见 `AUXILIARY_SENSOR_ONE_PASS_TEST.md`。开始采集前先运行 `scripts/create_auxiliary_test_session.py`，避免数据散落或遗漏失败场景。
+
 ### 事件相机
 
 至少保留以下场景，每段包含 RAW8、EVT2、CSV、开始/结束时间、布置照片和说明：

@@ -46,11 +46,31 @@ def validate_event(path: Path, window_us: int) -> dict[str, object]:
     positives = 0
     first_timestamp: int | None = None
     last_timestamp: int | None = None
+    first_packet_timestamp: int | None = None
+    previous_packet_timestamp: int | None = None
+    missing_packet_windows = 0
+    max_packet_gap_us = 0
+    min_events_per_packet: int | None = None
+    max_events_per_packet = 0
     for packet in iter_event_packets(path, window_us=window_us):
         summary = summarize_event_packet(packet)
         packets += 1
         events += int(summary["event_count"])
         positives += sum(sample.polarity for sample in packet.samples)
+        packet_events = len(packet.samples)
+        min_events_per_packet = (
+            packet_events
+            if min_events_per_packet is None
+            else min(min_events_per_packet, packet_events)
+        )
+        max_events_per_packet = max(max_events_per_packet, packet_events)
+        if first_packet_timestamp is None:
+            first_packet_timestamp = packet.start_timestamp_us
+        if previous_packet_timestamp is not None:
+            gap = packet.start_timestamp_us - previous_packet_timestamp
+            max_packet_gap_us = max(max_packet_gap_us, gap)
+            missing_packet_windows += max(0, gap // window_us - 1)
+        previous_packet_timestamp = packet.start_timestamp_us
         if packet.samples:
             first_timestamp = (
                 packet.samples[0].timestamp_us if first_timestamp is None else first_timestamp
@@ -68,6 +88,18 @@ def validate_event(path: Path, window_us: int) -> dict[str, object]:
         ),
         "positive_fraction": positives / events if events else 0.0,
         "event_window_us": window_us,
+        "mean_event_rate_hz": (
+            events * 1_000_000.0 / (last_timestamp - first_timestamp)
+            if first_timestamp is not None
+            and last_timestamp is not None
+            and last_timestamp > first_timestamp
+            else 0.0
+        ),
+        "mean_events_per_nonempty_packet": events / packets if packets else 0.0,
+        "min_events_per_nonempty_packet": min_events_per_packet or 0,
+        "max_events_per_nonempty_packet": max_events_per_packet,
+        "missing_packet_window_count": missing_packet_windows,
+        "max_packet_gap_sec": max_packet_gap_us / 1_000_000.0,
     }
 
 
@@ -78,6 +110,12 @@ def validate_mmwave(path: Path, moving_speed_threshold: float) -> dict[str, obje
     tracks: set[int] = set()
     first_timestamp: int | None = None
     last_timestamp: int | None = None
+    previous_timestamp: int | None = None
+    previous_frame_id: int | None = None
+    missing_frame_id_count = 0
+    max_interframe_gap_us = 0
+    min_detections_per_frame: int | None = None
+    max_detections_per_frame = 0
     for frame in iter_mmwave_frames(path):
         summary = summarize_mmwave_frame(
             frame, moving_speed_threshold=moving_speed_threshold
@@ -86,6 +124,21 @@ def validate_mmwave(path: Path, moving_speed_threshold: float) -> dict[str, obje
         detections += int(summary["detection_count"])
         moving += int(summary["moving_detection_count"])
         tracks.update(item.track_id for item in frame.detections)
+        frame_detections = len(frame.detections)
+        min_detections_per_frame = (
+            frame_detections
+            if min_detections_per_frame is None
+            else min(min_detections_per_frame, frame_detections)
+        )
+        max_detections_per_frame = max(max_detections_per_frame, frame_detections)
+        if previous_timestamp is not None:
+            max_interframe_gap_us = max(
+                max_interframe_gap_us, frame.timestamp_us - previous_timestamp
+            )
+        if previous_frame_id is not None:
+            missing_frame_id_count += max(0, frame.frame_id - previous_frame_id - 1)
+        previous_timestamp = frame.timestamp_us
+        previous_frame_id = frame.frame_id
         first_timestamp = frame.timestamp_us if first_timestamp is None else first_timestamp
         last_timestamp = frame.timestamp_us
     return {
@@ -101,6 +154,19 @@ def validate_mmwave(path: Path, moving_speed_threshold: float) -> dict[str, obje
             else 0.0
         ),
         "moving_speed_threshold": moving_speed_threshold,
+        "effective_frame_rate_hz": (
+            (frames - 1) * 1_000_000.0 / (last_timestamp - first_timestamp)
+            if first_timestamp is not None
+            and last_timestamp is not None
+            and frames > 1
+            and last_timestamp > first_timestamp
+            else 0.0
+        ),
+        "mean_detections_per_frame": detections / frames if frames else 0.0,
+        "min_detections_per_frame": min_detections_per_frame or 0,
+        "max_detections_per_frame": max_detections_per_frame,
+        "missing_frame_id_count": missing_frame_id_count,
+        "max_interframe_gap_sec": max_interframe_gap_us / 1_000_000.0,
     }
 
 
