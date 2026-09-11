@@ -72,6 +72,7 @@ run_check "IMPORT_UWB_MODEL" python3 -c "import uwb_data_model"
 run_check "IMPORT_UWB_ESTIMATOR" python3 -c "import uwb_2d_estimator"
 run_check "IMPORT_UWB_QUALITY" python3 -c "import uwb_quality_gate"
 run_check "IMPORT_UWB_INPUT" python3 -c "import uwb_input"
+run_check "IMPORT_AUX_SENSOR_DATA" python3 -c "import auxiliary_sensor_data"
 
 # Step 3: Unit tests
 echo ""
@@ -85,6 +86,7 @@ run_check "HEALTH_TESTS" python3 -m pytest src/ylhb_base/test/test_navigation_he
 run_check "UWB_TESTS" python3 -m pytest src/ylhb_base/test/test_uwb_model1_integration.py src/ylhb_base/test/test_uwb_model3_compatibility.py -v --tb=no
 run_check "UWB_MEASURED_EVIDENCE_TEST" python3 -m pytest src/ylhb_base/test/test_measured_uwb_analysis.py -v --tb=no
 run_check "INTEGRATION_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_navigation_protocols.py -v --tb=no
+run_check "AUX_SENSOR_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_multisource_fusion_protocols.py -v --tb=no
 
 # Step 4: System scenarios
 echo ""

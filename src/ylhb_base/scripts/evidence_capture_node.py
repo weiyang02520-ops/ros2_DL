@@ -22,6 +22,8 @@ DIAGNOSTIC_TOPICS = (
     "/dg/lidar/quality",
     "/dg/gnss/quality",
     "/dg/uwb/quality",
+    "/dg/event_camera/quality",
+    "/dg/mmwave/quality",
     "/dg/fusion/status",
     "/dg/navigation/status",
     "/dg/relocalization/match_quality",

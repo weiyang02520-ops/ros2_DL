@@ -1,4 +1,6 @@
 import ast
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,11 +10,54 @@ SCRIPTS = ROOT / "scripts"
 LAUNCH = ROOT / "launch" / "dg_navigation_integration.launch.py"
 CMAKE = ROOT / "CMakeLists.txt"
 
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from auxiliary_sensor_data import (  # noqa: E402
+    iter_event_packets,
+    iter_mmwave_frames,
+    summarize_event_packet,
+    summarize_mmwave_frame,
+)
+
 
 class MultisourceFusionProtocolTests(unittest.TestCase):
     def test_new_python_modules_parse_without_ros_imports_at_module_scope(self) -> None:
-        for name in ("multisource_fusion_core.py", "multisource_fusion_node.py"):
+        for name in (
+            "multisource_fusion_core.py",
+            "multisource_fusion_node.py",
+            "auxiliary_sensor_data.py",
+            "auxiliary_sensor_replay_node.py",
+        ):
             ast.parse((SCRIPTS / name).read_text(encoding="utf-8"))
+
+    def test_measured_auxiliary_sensor_csv_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            event_csv = root / "events.csv"
+            event_csv.write_text(
+                "x,y,polarity,timestamp\n10,20,1,1000\n11,20,0,2000\n12,21,1,22000\n",
+                encoding="utf-8",
+            )
+            event_packets = list(iter_event_packets(event_csv, window_us=20_000))
+            self.assertEqual([len(packet.samples) for packet in event_packets], [2, 1])
+            event_summary = summarize_event_packet(event_packets[0])
+            self.assertEqual(event_summary["event_count"], 2)
+            self.assertEqual(event_summary["positive_fraction"], 0.5)
+
+            mmwave_csv = root / "mmwave.csv"
+            mmwave_csv.write_text(
+                "timestamp_us,frame_id,track_id,x_m,y_m,z_m,radial_velocity_mps,snr_db,confidence\n"
+                "1000,7,1,1.0,0.2,0.1,0.4,18.0,0.9\n"
+                "1000,7,2,1.4,-0.2,0.1,0.0,12.0,0.7\n"
+                "2000,8,1,0.9,0.2,0.1,-0.2,17.0,0.8\n",
+                encoding="utf-8",
+            )
+            mmwave_frames = list(iter_mmwave_frames(mmwave_csv))
+            self.assertEqual([frame.frame_id for frame in mmwave_frames], [7, 8])
+            radar_summary = summarize_mmwave_frame(mmwave_frames[0])
+            self.assertEqual(radar_summary["detection_count"], 2)
+            self.assertEqual(radar_summary["moving_detection_count"], 1)
 
     def test_core_defines_required_modes_and_outputs(self) -> None:
         text = (SCRIPTS / "multisource_fusion_core.py").read_text(encoding="utf-8")
@@ -85,6 +130,15 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         ):
             self.assertIn(f'"{argument}"', text)
 
+        for sensor, data_topic, quality_topic in (
+            ("event_camera", "/dg/event_camera/events", "/dg/event_camera/quality"),
+            ("mmwave", "/dg/mmwave/points", "/dg/mmwave/quality"),
+        ):
+            self.assertIn(f'"sensor_kind": "{sensor}"', text)
+            self.assertIn(f'"data_topic": "{data_topic}"', text)
+            self.assertIn(f'"quality_topic": "{quality_topic}"', text)
+            self.assertIn(f'"enable_{sensor}_replay"', text)
+
     def test_launch_alignment_parameters_are_explicit_float_values(self) -> None:
         text = LAUNCH.read_text(encoding="utf-8")
         self.assertIn("from launch_ros.parameter_descriptions import ParameterValue", text)
@@ -109,6 +163,8 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         text = CMAKE.read_text(encoding="utf-8")
         self.assertIn("scripts/multisource_fusion_core.py", text)
         self.assertIn("scripts/multisource_fusion_node.py", text)
+        self.assertIn("scripts/auxiliary_sensor_data.py", text)
+        self.assertIn("scripts/auxiliary_sensor_replay_node.py", text)
         self.assertIn("test_multisource_fusion_core", text)
         self.assertIn("test_multisource_fusion_protocols", text)
 

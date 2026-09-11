@@ -34,6 +34,8 @@ def generate_launch_description():
     enable_multisource_fusion = LaunchConfiguration("enable_multisource_fusion")
     enable_scan_map = LaunchConfiguration("enable_scan_map")
     enable_uwb_replay = LaunchConfiguration("enable_uwb_replay")
+    enable_event_camera_replay = LaunchConfiguration("enable_event_camera_replay")
+    enable_mmwave_replay = LaunchConfiguration("enable_mmwave_replay")
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_file = LaunchConfiguration("map")
     params_file = LaunchConfiguration("params_file")
@@ -41,6 +43,11 @@ def generate_launch_description():
     uwb_replay_file = LaunchConfiguration("uwb_replay_file")
     uwb_replay_rate_hz = LaunchConfiguration("uwb_replay_rate_hz")
     uwb_replay_loop = LaunchConfiguration("uwb_replay_loop")
+    event_camera_input_file = LaunchConfiguration("event_camera_input_file")
+    event_camera_replay_rate_hz = LaunchConfiguration("event_camera_replay_rate_hz")
+    event_camera_window_us = LaunchConfiguration("event_camera_window_us")
+    mmwave_input_file = LaunchConfiguration("mmwave_input_file")
+    mmwave_replay_rate_hz = LaunchConfiguration("mmwave_replay_rate_hz")
     uwb_alignment_enabled = LaunchConfiguration("uwb_alignment_enabled")
     uwb_to_map_yaw = LaunchConfiguration("uwb_to_map_yaw")
     uwb_to_map_offset_x = LaunchConfiguration("uwb_to_map_offset_x")
@@ -109,6 +116,43 @@ def generate_launch_description():
                 "playback_rate_hz": ParameterValue(uwb_replay_rate_hz, value_type=float),
                 "loop": ParameterValue(uwb_replay_loop, value_type=bool),
             },
+        ],
+    )
+    event_camera_replay = Node(
+        package="ylhb_base",
+        executable="auxiliary_sensor_replay_node",
+        name="dg_event_camera_replay_node",
+        output="screen",
+        condition=IfCondition(enable_event_camera_replay),
+        parameters=[
+            {
+                "sensor_kind": "event_camera",
+                "input_file": event_camera_input_file,
+                "replay_rate_hz": ParameterValue(
+                    event_camera_replay_rate_hz, value_type=float
+                ),
+                "event_window_us": ParameterValue(event_camera_window_us, value_type=int),
+                "frame_id": "event_camera_optical_frame",
+                "data_topic": "/dg/event_camera/events",
+                "quality_topic": "/dg/event_camera/quality",
+            }
+        ],
+    )
+    mmwave_replay = Node(
+        package="ylhb_base",
+        executable="auxiliary_sensor_replay_node",
+        name="dg_mmwave_replay_node",
+        output="screen",
+        condition=IfCondition(enable_mmwave_replay),
+        parameters=[
+            {
+                "sensor_kind": "mmwave",
+                "input_file": mmwave_input_file,
+                "replay_rate_hz": ParameterValue(mmwave_replay_rate_hz, value_type=float),
+                "frame_id": "mmwave_link",
+                "data_topic": "/dg/mmwave/points",
+                "quality_topic": "/dg/mmwave/quality",
+            }
         ],
     )
     scan_map = Node(
@@ -250,6 +294,21 @@ def generate_launch_description():
             DeclareLaunchArgument("uwb_replay_file", default_value=default_uwb_replay),
             DeclareLaunchArgument("uwb_replay_rate_hz", default_value="25.0"),
             DeclareLaunchArgument("uwb_replay_loop", default_value="false"),
+            DeclareLaunchArgument(
+                "enable_event_camera_replay",
+                default_value="false",
+                description="Replay measured Shimeta event CSV; observation only",
+            ),
+            DeclareLaunchArgument("event_camera_input_file", default_value=""),
+            DeclareLaunchArgument("event_camera_replay_rate_hz", default_value="50.0"),
+            DeclareLaunchArgument("event_camera_window_us", default_value="20000"),
+            DeclareLaunchArgument(
+                "enable_mmwave_replay",
+                default_value="false",
+                description="Replay vendor-normalized measured mmWave CSV; observation only",
+            ),
+            DeclareLaunchArgument("mmwave_input_file", default_value=""),
+            DeclareLaunchArgument("mmwave_replay_rate_hz", default_value="20.0"),
             DeclareLaunchArgument("uwb_params_file", default_value=default_uwb_params),
             DeclareLaunchArgument("uwb_alignment_enabled", default_value="false"),
             DeclareLaunchArgument("uwb_to_map_yaw", default_value="0.0"),
@@ -304,6 +363,8 @@ def generate_launch_description():
             lidar,
             gnss,
             uwb_replay,
+            event_camera_replay,
+            mmwave_replay,
             scan_map,
             relocalization,
             health,

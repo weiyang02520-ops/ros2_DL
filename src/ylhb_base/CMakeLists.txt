@@ -113,6 +113,7 @@ install(PROGRAMS
   scripts/mission_activity.py
   scripts/cmd_vel_arbiter_core.py
   scripts/multisource_fusion_core.py
+  scripts/auxiliary_sensor_data.py
   scripts/uwb_data_model.py
   scripts/uwb_input.py
   scripts/uwb_2d_estimator.py
@@ -139,6 +140,8 @@ install(PROGRAMS scripts/uwb_replay_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME uwb_replay_node)
 install(PROGRAMS scripts/evidence_capture_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME evidence_capture_node)
+install(PROGRAMS scripts/auxiliary_sensor_replay_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME auxiliary_sensor_replay_node)
 install(PROGRAMS scripts/invalid_candidate_injector_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME invalid_candidate_injector_node)
 
