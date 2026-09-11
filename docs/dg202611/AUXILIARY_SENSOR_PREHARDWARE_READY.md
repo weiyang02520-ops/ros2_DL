@@ -80,6 +80,16 @@ timestamp_us,frame_id,track_id,x_m,y_m,z_m,radial_velocity_mps,snr_db,confidence
 
 ## 现有工具
 
+在 Jetson 上可用隔离话题执行一次接口冒烟检查：
+
+```bash
+./scripts/run_auxiliary_ros_smoke.sh
+```
+
+该脚本只使用明确标记为 `SYNTHETIC_CONTRACT_FIXTURE` 的小型数据，检查事件
+回放、特征重复率、毫米波回放、MODEL-2 动态扇区消费以及进程组清理。它不发布
+运动指令，输出不能作为真实硬件或老师指标证据。
+
 校验事件 CSV：
 
 ```bash

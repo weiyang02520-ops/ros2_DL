@@ -42,6 +42,8 @@ run_check() {
     fi
 }
 
+run_check "AUXILIARY_ROS_SMOKE_SCRIPT_SYNTAX" bash -n "$REPO_ROOT/scripts/run_auxiliary_ros_smoke.sh"
+
 # Step 1: ROS2 build
 echo ""
 echo "===STEP 1: ROS2 BUILD==="

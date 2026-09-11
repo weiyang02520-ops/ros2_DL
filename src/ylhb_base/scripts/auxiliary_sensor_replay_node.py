@@ -49,6 +49,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("frame_id", "")
             self.declare_parameter("data_topic", "")
             self.declare_parameter("quality_topic", "")
+            self.declare_parameter("source_kind", "MEASURED_REPLAY")
             self.declare_parameter("event_width", 768)
             self.declare_parameter("event_height", 608)
             self.declare_parameter("event_window_us", 20_000)
@@ -83,6 +84,14 @@ def create_node(node_name: str) -> Any:
             quality_topic = str(self.get_parameter("quality_topic").value).strip() or default_quality_topic
             if not data_topic.startswith("/") or not quality_topic.startswith("/"):
                 raise ValueError("data_topic and quality_topic must be absolute ROS topics")
+            self._source_kind = str(self.get_parameter("source_kind").value).strip()
+            if self._source_kind not in {
+                "MEASURED_REPLAY",
+                "SYNTHETIC_CONTRACT_FIXTURE",
+            }:
+                raise ValueError(
+                    "source_kind must be MEASURED_REPLAY or SYNTHETIC_CONTRACT_FIXTURE"
+                )
 
             self._event_width = int(self.get_parameter("event_width").value)
             self._event_height = int(self.get_parameter("event_height").value)
@@ -250,7 +259,7 @@ def create_node(node_name: str) -> Any:
             values = {
                 "sensor_kind": self._sensor_kind,
                 "state": status.message,
-                "source_kind": "MEASURED_REPLAY",
+                "source_kind": self._source_kind,
                 "source_timestamp_us": source_timestamp_us,
                 "source_file": self._input_path.name,
                 "source_protocol": protocol,

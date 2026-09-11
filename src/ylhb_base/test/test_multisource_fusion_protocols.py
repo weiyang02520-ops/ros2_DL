@@ -61,6 +61,12 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             self.assertEqual(radar_summary["detection_count"], 2)
             self.assertEqual(radar_summary["moving_detection_count"], 1)
 
+    def test_replay_source_kind_cannot_silently_label_fixture_as_measured(self) -> None:
+        text = (SCRIPTS / "auxiliary_sensor_replay_node.py").read_text(encoding="utf-8")
+        self.assertIn('self.declare_parameter("source_kind", "MEASURED_REPLAY")', text)
+        self.assertIn('"SYNTHETIC_CONTRACT_FIXTURE"', text)
+        self.assertIn('"source_kind": self._source_kind', text)
+
     def test_core_defines_required_modes_and_outputs(self) -> None:
         text = (SCRIPTS / "multisource_fusion_core.py").read_text(encoding="utf-8")
         for value in (
