@@ -41,6 +41,13 @@ def test_capture_topics_cover_all_three_models_and_uwb():
         "/patrol/status",
         "/patrol/event",
         "/imu/data",
+        "/gps/fix",
+        "/gps/rtk_status",
+        "/zed/zed_node/odom",
+        "/dg/event_camera/events",
+        "/dg/event_camera/quality",
+        "/dg/mmwave/points",
+        "/dg/mmwave/quality",
     }
     assert required.issubset(DEFAULT_TOPICS)
 
@@ -106,6 +113,16 @@ def test_capture_script_has_no_ros_motion_publish_command():
     source = (SCRIPTS / "real_robot_capture.py").read_text(encoding="utf-8")
     assert "ros2 topic pub" not in source
     assert '("ros2", "topic", "pub"' not in source
+
+
+def test_capture_preserves_optional_vertical_ground_truth_contract():
+    capture_source = (SCRIPTS / "real_robot_capture.py").read_text(encoding="utf-8")
+    evidence_source = (YLHB_SCRIPTS / "evidence_capture_node.py").read_text(encoding="utf-8")
+    evaluator_source = (SCRIPTS / "position_error_evaluator.py").read_text(encoding="utf-8")
+    assert "--ground-truth-z" in capture_source
+    assert '"estimated_z"' in evidence_source
+    assert '"ground_truth_z"' in evidence_source
+    assert "compute_vertical_metrics" in evaluator_source
 
 
 def test_structured_capture_preserves_features_and_one_terminal_event_per_attempt():

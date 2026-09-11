@@ -160,7 +160,7 @@ def create_node(
     ready_file: Path,
     start_file: Path,
     estimated_pose_topic: str,
-    ground_truth: tuple[float, float] | None,
+    ground_truth: tuple[float, float, float | None] | None,
     ground_truth_frame: str,
     patrol_start_file: Path | None = None,
     patrol_terminal_file: Path | None = None,
@@ -258,6 +258,10 @@ def create_node(
                         "uwb_alignment_ready",
                         "position_uncertainty",
                         "yaw_uncertainty",
+                        "altitude",
+                        "altitude_uncertainty",
+                        "altitude_anchored",
+                        "altitude_source",
                         "measurement_confidence",
                         "reasons",
                     ),
@@ -268,8 +272,10 @@ def create_node(
                         "timestamp",
                         "estimated_x",
                         "estimated_y",
+                        "estimated_z",
                         "ground_truth_x",
                         "ground_truth_y",
+                        "ground_truth_z",
                         "coordinate_frame",
                         "source_topic",
                     ),
@@ -299,6 +305,7 @@ def create_node(
                         "publishes_motion_commands": False,
                         "estimated_pose_topic": estimated_pose_topic,
                         "ground_truth_enabled": ground_truth is not None,
+                        "ground_truth_z_enabled": ground_truth is not None and ground_truth[2] is not None,
                         "ground_truth_frame": ground_truth_frame,
                     },
                     ensure_ascii=False,
@@ -381,10 +388,11 @@ def create_node(
             try:
                 x = float(message.pose.pose.position.x)
                 y = float(message.pose.pose.position.y)
+                z = float(message.pose.pose.position.z)
             except (AttributeError, TypeError, ValueError):
                 self._count("estimated_pose_invalid")
                 return
-            if not (math.isfinite(x) and math.isfinite(y)):
+            if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z)):
                 self._count("estimated_pose_invalid")
                 return
             self._sinks["position"].write(
@@ -392,8 +400,10 @@ def create_node(
                     "timestamp": stamp_seconds(message, self._now()),
                     "estimated_x": x,
                     "estimated_y": y,
+                    "estimated_z": z,
                     "ground_truth_x": self._ground_truth[0],
                     "ground_truth_y": self._ground_truth[1],
+                    "ground_truth_z": "" if self._ground_truth[2] is None else self._ground_truth[2],
                     "coordinate_frame": coordinate_frame,
                     "source_topic": self._estimated_pose_topic,
                 }
@@ -453,6 +463,7 @@ def create_node(
                 "publishes_motion_commands": False,
                 "estimated_pose_topic": self._estimated_pose_topic,
                 "ground_truth_enabled": self._ground_truth is not None,
+                "ground_truth_z_enabled": self._ground_truth is not None and self._ground_truth[2] is not None,
                 "ground_truth_frame": self._ground_truth_frame,
                 "record_counts": dict(sorted(self._counts.items())),
             }
@@ -472,6 +483,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--estimated-pose-topic", default="/dg/fusion/pose")
     parser.add_argument("--ground-truth-x", type=float)
     parser.add_argument("--ground-truth-y", type=float)
+    parser.add_argument("--ground-truth-z", type=float)
     parser.add_argument("--ground-truth-frame", default="map")
     parser.add_argument("--patrol-start-file")
     parser.add_argument("--patrol-terminal-file")
@@ -483,16 +495,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     supplied = (arguments.ground_truth_x is not None, arguments.ground_truth_y is not None)
     if supplied[0] != supplied[1]:
         raise SystemExit("--ground-truth-x and --ground-truth-y must be supplied together")
+    if arguments.ground_truth_z is not None and not all(supplied):
+        raise SystemExit("--ground-truth-z requires --ground-truth-x and --ground-truth-y")
     if not arguments.estimated_pose_topic.startswith("/"):
         raise SystemExit("--estimated-pose-topic must be an absolute ROS topic")
     if not arguments.ground_truth_frame.strip():
         raise SystemExit("--ground-truth-frame must not be empty")
     ground_truth = (
-        (float(arguments.ground_truth_x), float(arguments.ground_truth_y))
+        (
+            float(arguments.ground_truth_x),
+            float(arguments.ground_truth_y),
+            None if arguments.ground_truth_z is None else float(arguments.ground_truth_z),
+        )
         if all(supplied)
         else None
     )
-    if ground_truth is not None and not all(math.isfinite(value) for value in ground_truth):
+    if ground_truth is not None and not all(
+        value is None or math.isfinite(value) for value in ground_truth
+    ):
         raise SystemExit("ground-truth coordinates must be finite")
 
     try:

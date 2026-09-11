@@ -13,7 +13,12 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from position_error_evaluator import (
-    PositionSample, compute_error, compute_metrics, read_csv
+    PositionSample,
+    compute_error,
+    compute_metrics,
+    compute_vertical_error,
+    compute_vertical_metrics,
+    read_csv,
 )
 
 
@@ -86,6 +91,18 @@ class TestPositionErrorEvaluator(unittest.TestCase):
         metrics = compute_metrics([])
         self.assertIsNone(metrics)
 
+    def test_vertical_metrics_use_only_rows_with_independent_z_truth(self):
+        samples = [
+            PositionSample(0.0, 0.0, 0.0, 0.0, 0.0, 1.10, 1.00),
+            PositionSample(1.0, 0.0, 0.0, 0.0, 0.0, 1.30, 1.00),
+            PositionSample(2.0, 0.0, 0.0, 0.0, 0.0),
+        ]
+        self.assertAlmostEqual(compute_vertical_error(samples[0]), 0.10, places=6)
+        metrics = compute_vertical_metrics(samples)
+        self.assertIsNotNone(metrics)
+        self.assertEqual(metrics.count, 2)
+        self.assertAlmostEqual(metrics.mean, 0.20, places=6)
+
     def test_read_csv_valid(self):
         """Test reading valid CSV file."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
@@ -119,6 +136,23 @@ class TestPositionErrorEvaluator(unittest.TestCase):
         try:
             samples = read_csv(temp_path)
             self.assertEqual(len(samples), 2)  # Only valid rows
+        finally:
+            os.unlink(temp_path)
+
+    def test_read_csv_accepts_optional_z_columns(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'timestamp', 'estimated_x', 'estimated_y', 'estimated_z',
+                'ground_truth_x', 'ground_truth_y', 'ground_truth_z'
+            ])
+            writer.writerow([0.0, 1.0, 2.0, 0.25, 1.1, 2.1, 0.20])
+            temp_path = f.name
+        try:
+            samples = read_csv(temp_path)
+            self.assertEqual(len(samples), 1)
+            self.assertAlmostEqual(samples[0].estimated_z, 0.25, places=6)
+            self.assertAlmostEqual(samples[0].ground_truth_z, 0.20, places=6)
         finally:
             os.unlink(temp_path)
 

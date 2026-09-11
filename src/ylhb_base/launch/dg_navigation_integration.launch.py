@@ -36,6 +36,7 @@ def generate_launch_description():
     enable_uwb_replay = LaunchConfiguration("enable_uwb_replay")
     enable_event_camera_replay = LaunchConfiguration("enable_event_camera_replay")
     enable_mmwave_replay = LaunchConfiguration("enable_mmwave_replay")
+    enable_relative_height = LaunchConfiguration("enable_relative_height")
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_file = LaunchConfiguration("map")
     params_file = LaunchConfiguration("params_file")
@@ -48,6 +49,7 @@ def generate_launch_description():
     event_camera_window_us = LaunchConfiguration("event_camera_window_us")
     mmwave_input_file = LaunchConfiguration("mmwave_input_file")
     mmwave_replay_rate_hz = LaunchConfiguration("mmwave_replay_rate_hz")
+    relative_height_odom_topic = LaunchConfiguration("relative_height_odom_topic")
     uwb_alignment_enabled = LaunchConfiguration("uwb_alignment_enabled")
     uwb_to_map_yaw = LaunchConfiguration("uwb_to_map_yaw")
     uwb_to_map_offset_x = LaunchConfiguration("uwb_to_map_offset_x")
@@ -254,6 +256,8 @@ def generate_launch_description():
                 "uwb_to_map_yaw": ParameterValue(uwb_to_map_yaw, value_type=float),
                 "uwb_to_map_offset_x": ParameterValue(uwb_to_map_offset_x, value_type=float),
                 "uwb_to_map_offset_y": ParameterValue(uwb_to_map_offset_y, value_type=float),
+                "relative_height_enabled": ParameterValue(enable_relative_height, value_type=bool),
+                "relative_height_odom_topic": relative_height_odom_topic,
                 "fusion_odom_topic": "/dg/fusion/odom",
                 "fusion_pose_topic": "/dg/fusion/pose",
                 "fusion_status_topic": "/dg/fusion/status",
@@ -309,6 +313,15 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("mmwave_input_file", default_value=""),
             DeclareLaunchArgument("mmwave_replay_rate_hz", default_value="20.0"),
+            DeclareLaunchArgument(
+                "enable_relative_height",
+                default_value="false",
+                description="Use gravity-aligned ZED visual odometry as MODEL-1 relative height input",
+            ),
+            DeclareLaunchArgument(
+                "relative_height_odom_topic",
+                default_value="/zed/zed_node/odom",
+            ),
             DeclareLaunchArgument("uwb_params_file", default_value=default_uwb_params),
             DeclareLaunchArgument("uwb_alignment_enabled", default_value="false"),
             DeclareLaunchArgument("uwb_to_map_yaw", default_value="0.0"),

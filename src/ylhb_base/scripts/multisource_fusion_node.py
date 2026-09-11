@@ -22,6 +22,7 @@ from multisource_fusion_core import (  # noqa: E402
     MapPoseMeasurement,
     MultisourceFusionCore,
     Pose2D,
+    RelativeHeightMeasurement,
     UwbPositionMeasurement,
 )
 from diagnostic_level import normalize_diagnostic_level  # noqa: E402
@@ -91,6 +92,10 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("uwb_to_map_yaw", 0.0)
             self.declare_parameter("uwb_to_map_offset_x", 0.0)
             self.declare_parameter("uwb_to_map_offset_y", 0.0)
+            self.declare_parameter("relative_height_enabled", False)
+            self.declare_parameter("relative_height_odom_topic", "/zed/zed_node/odom")
+            self.declare_parameter("relative_height_max_covariance", 0.5)
+            self.declare_parameter("relative_height_delta_gate", 0.5)
             self.declare_parameter("fusion_odom_topic", "/dg/fusion/odom")
             self.declare_parameter("fusion_pose_topic", "/dg/fusion/pose")
             self.declare_parameter("fusion_status_topic", "/dg/fusion/status")
@@ -150,6 +155,12 @@ def create_node(node_name: str) -> Any:
                     max_correction_step=float(self.get_parameter("max_correction_step").value),
                     gnss_residual_gate=float(self.get_parameter("gnss_residual_gate").value),
                     lidar_residual_gate=float(self.get_parameter("lidar_residual_gate").value),
+                    relative_height_max_covariance=float(
+                        self.get_parameter("relative_height_max_covariance").value
+                    ),
+                    relative_height_delta_gate=float(
+                        self.get_parameter("relative_height_delta_gate").value
+                    ),
                 )
             )
             self._max_amcl_covariance = float(self.get_parameter("max_amcl_covariance").value)
@@ -195,6 +206,13 @@ def create_node(node_name: str) -> Any:
             self._uwb_quality: dict[str, str] = {}
             self._uwb_quality_received_at: float | None = None
             self._uwb_alignment_ready = False
+            self._relative_height_enabled = bool(
+                self.get_parameter("relative_height_enabled").value
+            )
+            self._relative_height_odom: Any | None = None
+            self._relative_height_received_at: float | None = None
+            self._relative_height_sequence = 0
+            self._relative_height_consumed_sequence = 0
 
             self._odom_pub = self.create_publisher(
                 Odometry, str(self.get_parameter("fusion_odom_topic").value), 10
@@ -235,6 +253,13 @@ def create_node(node_name: str) -> Any:
                     DiagnosticArray, str(self.get_parameter("uwb_quality_topic").value), self._on_uwb_quality, 10
                 )
                 self._check_uwb_alignment()
+            if self._relative_height_enabled:
+                self.create_subscription(
+                    Odometry,
+                    str(self.get_parameter("relative_height_odom_topic").value),
+                    self._on_relative_height_odom,
+                    10,
+                )
             self._timer = self.create_timer(float(self.get_parameter("timer_period").value), self._tick)
             if bool(self.get_parameter("publish_tf").value):
                 self.get_logger().warn("publish_tf is intentionally ignored; fusion POC never owns map->odom TF")
@@ -314,6 +339,11 @@ def create_node(node_name: str) -> Any:
             if selected:
                 self._uwb_quality = {kv.key: kv.value for kv in selected.values}
                 self._uwb_quality_received_at = self._now()
+
+        def _on_relative_height_odom(self, message: Any) -> None:
+            self._relative_height_odom = message
+            self._relative_height_received_at = self._now()
+            self._relative_height_sequence += 1
 
         def _on_odom(self, message: Any) -> None:
             now = self._now()
@@ -509,6 +539,36 @@ def create_node(node_name: str) -> Any:
                 confidence=confidence,
             )
 
+        def _relative_height_measurement(
+            self, now: float
+        ) -> RelativeHeightMeasurement | None:
+            if not self._relative_height_enabled or self._relative_height_odom is None:
+                return None
+            message = self._relative_height_odom
+            stamp = _stamp_to_seconds(message.header.stamp) or self._relative_height_received_at or now
+            try:
+                z = float(message.pose.pose.position.z)
+                covariance = float(message.pose.covariance[14])
+            except (AttributeError, IndexError, TypeError, ValueError):
+                return RelativeHeightMeasurement(
+                    float("nan"), stamp, state="REJECTED", accepted=False
+                )
+            fresh = (
+                self._relative_height_received_at is not None
+                and now - self._relative_height_received_at <= self._timeout
+                and now - stamp <= self._timeout
+            )
+            accepted = _finite(z) and _finite(covariance) and covariance >= 0.0
+            return RelativeHeightMeasurement(
+                z=z,
+                timestamp=stamp,
+                state="GOOD" if accepted else "REJECTED",
+                fresh=fresh,
+                accepted=accepted,
+                covariance=covariance if _finite(covariance) else None,
+                source="ZED_VISUAL_ODOM",
+            )
+
         def _tick(self) -> None:
             now = self._now()
             new_odom = self._local_odom if self._odom_sequence != self._odom_consumed_sequence else None
@@ -516,6 +576,11 @@ def create_node(node_name: str) -> Any:
             new_scan_pose = self._scan_match_pose if self._scan_match_sequence != self._scan_match_consumed_sequence else None
             new_amcl_pose = self._amcl_pose if self._amcl_sequence != self._amcl_consumed_sequence else None
             new_uwb = self._uwb_measurement(now) if self._uwb_sequence != self._uwb_consumed_sequence else None
+            new_relative_height = (
+                self._relative_height_measurement(now)
+                if self._relative_height_sequence != self._relative_height_consumed_sequence
+                else None
+            )
             scan = self._map_measurement(new_scan_pose, self._scan_match_state, self._scan_match_accepted, "scan_match", now)
             amcl = self._map_measurement(new_amcl_pose, self._amcl_state, self._amcl_state == "GOOD", "amcl", now)
             output = self._core.process(
@@ -526,6 +591,7 @@ def create_node(node_name: str) -> Any:
                     scan_match_pose=scan,
                     amcl_pose=amcl,
                     uwb=new_uwb,
+                    relative_height=new_relative_height,
                 )
             )
             self._odom_consumed_sequence = self._odom_sequence
@@ -533,6 +599,7 @@ def create_node(node_name: str) -> Any:
             self._scan_match_consumed_sequence = self._scan_match_sequence
             self._amcl_consumed_sequence = self._amcl_sequence
             self._uwb_consumed_sequence = self._uwb_sequence
+            self._relative_height_consumed_sequence = self._relative_height_sequence
             self._publish(output)
 
         def _publish(self, output: Any) -> None:
@@ -550,9 +617,13 @@ def create_node(node_name: str) -> Any:
                 odom.child_frame_id = self._output_child_frame_id
                 odom.pose.pose.position.x = pose.x
                 odom.pose.pose.position.y = pose.y
+                odom.pose.pose.position.z = output.altitude if output.altitude is not None else 0.0
                 odom.pose.pose.orientation.w = math.cos(pose.yaw / 2.0)
                 odom.pose.pose.orientation.z = math.sin(pose.yaw / 2.0)
                 odom.pose.covariance[0] = output.position_uncertainty ** 2
+                odom.pose.covariance[14] = (
+                    output.altitude_uncertainty ** 2 if output.altitude is not None else 1e6
+                )
                 odom.pose.covariance[35] = output.yaw_uncertainty ** 2
                 self._odom_pub.publish(odom)
 
@@ -581,6 +652,11 @@ def create_node(node_name: str) -> Any:
                 "global_anchored": output.global_anchored,
                 "uncertainty_model": "POC_HEURISTIC_NOT_CALIBRATED_COVARIANCE",
                 "measurement_confidence": output.measurement_confidence,
+                "altitude": output.altitude,
+                "altitude_uncertainty": output.altitude_uncertainty,
+                "altitude_anchored": output.altitude_anchored,
+                "altitude_source": output.altitude_source,
+                "relative_height_enabled": self._relative_height_enabled,
                 "adaptive_position_uncertainty": output.adaptive_position_uncertainty,
                 "adaptive_yaw_uncertainty": output.adaptive_yaw_uncertainty,
                 "map_to_odom_x": output.map_to_odom.x if output.map_to_odom else None,

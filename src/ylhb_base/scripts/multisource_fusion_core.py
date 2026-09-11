@@ -214,6 +214,19 @@ class UwbPositionMeasurement:
 
 
 @dataclass(frozen=True)
+class RelativeHeightMeasurement:
+    """Gravity-aligned relative height, for example from ZED visual odometry."""
+
+    z: float
+    timestamp: float
+    state: str = GOOD
+    fresh: bool = True
+    accepted: bool = True
+    covariance: float | None = None
+    source: str = "visual_odom"
+
+
+@dataclass(frozen=True)
 class FusionInput:
     now: float
     local_odom: Pose2D | None = None
@@ -221,6 +234,7 @@ class FusionInput:
     scan_match_pose: MapPoseMeasurement | None = None
     amcl_pose: MapPoseMeasurement | None = None
     uwb: UwbPositionMeasurement | None = None
+    relative_height: RelativeHeightMeasurement | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +269,15 @@ class FusionConfig:
     uwb_residual_gate: float = 3.0
     uwb_base_position_sigma: float = 0.5
     uwb_min_geometry_score: float = 0.1
+    vertical_residual_gate: float = 2.0
+    max_vertical_correction_step: float = 0.3
+    initial_altitude_uncertainty: float = 2.0
+    min_altitude_uncertainty: float = 0.05
+    relative_height_noise_per_m: float = 0.05
+    relative_height_noise_per_s: float = 0.005
+    gnss_base_altitude_sigma: float = 2.0
+    relative_height_max_covariance: float = 0.5
+    relative_height_delta_gate: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -272,6 +295,10 @@ class FusionOutput:
     measurement_confidence: float
     adaptive_position_uncertainty: float
     adaptive_yaw_uncertainty: float
+    altitude: float | None
+    altitude_uncertainty: float
+    altitude_anchored: bool
+    altitude_source: str | None
 
 
 def _threshold_quality(
@@ -404,6 +431,12 @@ class MultisourceFusionCore:
         self._adaptive_position_uncertainty = self.config.gnss_base_position_sigma
         self._adaptive_yaw_uncertainty = self.config.lidar_base_yaw_sigma
         self._last_output: FusionOutput | None = None
+        self._last_relative_height: RelativeHeightMeasurement | None = None
+        self._altitude: float | None = None
+        self._altitude_uncertainty = self.config.initial_altitude_uncertainty
+        self._altitude_anchored = False
+        self._altitude_source: str | None = None
+        self._last_altitude_update_time: float | None = None
 
     def _validate_config(self) -> None:
         nonnegative = (
@@ -429,6 +462,15 @@ class MultisourceFusionCore:
             self.config.lidar_base_yaw_sigma,
             self.config.uwb_base_position_sigma,
             self.config.uwb_min_geometry_score,
+            self.config.vertical_residual_gate,
+            self.config.max_vertical_correction_step,
+            self.config.initial_altitude_uncertainty,
+            self.config.min_altitude_uncertainty,
+            self.config.relative_height_noise_per_m,
+            self.config.relative_height_noise_per_s,
+            self.config.gnss_base_altitude_sigma,
+            self.config.relative_height_max_covariance,
+            self.config.relative_height_delta_gate,
         )
         if any(value < 0.0 for value in nonnegative):
             raise ValueError("fusion limits and noise values must be non-negative")
@@ -471,11 +513,14 @@ class MultisourceFusionCore:
                 dt = event.now - self._last_process_time
                 self._position_uncertainty += self.config.odom_position_noise_per_s * dt
                 self._yaw_uncertainty += self.config.odom_yaw_noise_per_s * dt
+                if self._altitude_anchored:
+                    self._altitude_uncertainty += self.config.relative_height_noise_per_s * dt
         self._last_process_time = event.now
         reason_count = len(reasons)
         propagated = self._propagate_odom(event.local_odom, event.now, reasons)
         if event.local_odom is not None and not propagated and len(reasons) == reason_count:
             reasons.append("LOCAL_ODOM_REJECTED")
+        self._propagate_relative_height(event.relative_height, event.now, reasons)
 
         if event.gnss is not None and not self._gnss_usable(event.gnss, event.now, reasons):
             if event.gnss.state.upper() not in {REJECTED, STALE} and event.gnss.accepted:
@@ -515,7 +560,7 @@ class MultisourceFusionCore:
                 if updated:
                     accepted_source = "UWB"
             elif gnss_update is not None:
-                gnss_pose, confidence = gnss_update
+                gnss_pose, confidence, altitude = gnss_update
                 updated = self._apply_absolute_update(
                     gnss_pose,
                     "GNSS",
@@ -527,9 +572,10 @@ class MultisourceFusionCore:
                 )
                 if updated:
                     accepted_source = "GNSS"
+                    self._apply_absolute_altitude(altitude, confidence, event.now, reasons)
         else:
             if gnss_update is not None:
-                gnss_pose, confidence = gnss_update
+                gnss_pose, confidence, altitude = gnss_update
                 updated = self._apply_absolute_update(
                     gnss_pose,
                     "GNSS",
@@ -541,6 +587,7 @@ class MultisourceFusionCore:
                 )
                 if updated:
                     accepted_source = "GNSS"
+                    self._apply_absolute_altitude(altitude, confidence, event.now, reasons)
             if uwb_update is not None:
                 uwb_pose, confidence = uwb_update
                 uwb_applied = self._apply_absolute_update(
@@ -628,6 +675,106 @@ class MultisourceFusionCore:
         self._last_local_odom = odom
         return True
 
+    def _propagate_relative_height(
+        self,
+        measurement: RelativeHeightMeasurement | None,
+        now: float,
+        reasons: list[str],
+    ) -> bool:
+        if measurement is None:
+            return False
+        if not measurement.accepted or measurement.state.upper() != GOOD:
+            reasons.append("RELATIVE_HEIGHT_REJECTED")
+            return False
+        if (
+            not measurement.fresh
+            or measurement.timestamp > now + 1e-6
+            or now - measurement.timestamp > self.config.freshness_timeout
+        ):
+            reasons.append("RELATIVE_HEIGHT_STALE")
+            return False
+        if not all(_finite(value) for value in (measurement.z, measurement.timestamp)):
+            reasons.append("RELATIVE_HEIGHT_INVALID")
+            return False
+        if (
+            measurement.covariance is not None
+            and (
+                not _finite(measurement.covariance)
+                or measurement.covariance < 0.0
+                or measurement.covariance > self.config.relative_height_max_covariance
+            )
+        ):
+            reasons.append("RELATIVE_HEIGHT_UNCERTAIN")
+            return False
+        previous = self._last_relative_height
+        if previous is None:
+            self._last_relative_height = measurement
+            return False
+        if measurement.timestamp == previous.timestamp:
+            return False
+        if measurement.timestamp < previous.timestamp:
+            reasons.append("RELATIVE_HEIGHT_TIME_REVERSED")
+            return False
+        delta = measurement.z - previous.z
+        self._last_relative_height = measurement
+        if abs(delta) > self.config.relative_height_delta_gate:
+            # Visual odometry can reset its local Z origin after a restart.
+            # Keep the new sample only as the next baseline so that reset is
+            # never injected into the absolute altitude estimate.
+            reasons.append("RELATIVE_HEIGHT_JUMP")
+            return False
+        if not self._altitude_anchored or self._altitude is None:
+            return False
+        self._altitude += delta
+        self._altitude_uncertainty += self.config.relative_height_noise_per_m * abs(delta)
+        self._altitude_source = measurement.source.upper()
+        self._last_altitude_update_time = now
+        return True
+
+    def _apply_absolute_altitude(
+        self,
+        altitude: float,
+        confidence: float,
+        now: float,
+        reasons: list[str],
+    ) -> bool:
+        if not _finite(altitude):
+            reasons.append("GNSS_ALTITUDE_INVALID")
+            return False
+        if self._altitude is None or not self._altitude_anchored:
+            self._altitude = float(altitude)
+            self._altitude_anchored = True
+        else:
+            residual = float(altitude) - self._altitude
+            if abs(residual) > self.config.vertical_residual_gate:
+                reasons.append("GNSS_ALTITUDE_OUTLIER")
+                return False
+            if self.config.max_vertical_correction_step == 0.0:
+                residual = 0.0
+            else:
+                residual = max(
+                    -self.config.max_vertical_correction_step,
+                    min(self.config.max_vertical_correction_step, residual),
+                )
+            self._altitude += residual * max(
+                self.config.adaptive_min_confidence,
+                _clamp(confidence),
+            )
+        effective_confidence = max(
+            self.config.adaptive_min_confidence,
+            _clamp(confidence),
+        )
+        self._altitude_uncertainty = max(
+            self.config.min_altitude_uncertainty,
+            min(
+                self._altitude_uncertainty * (1.0 - 0.5 * effective_confidence),
+                self.config.gnss_base_altitude_sigma / math.sqrt(effective_confidence),
+            ),
+        )
+        self._altitude_source = "GNSS"
+        self._last_altitude_update_time = now
+        return True
+
     def _gnss_usable(self, gnss: GnssPosition, now: float, reasons: list[str]) -> bool:
         if not gnss.accepted:
             reasons.append("GNSS_REJECTED")
@@ -645,7 +792,12 @@ class MultisourceFusionCore:
             return False
         return all(_finite(value) for value in (gnss.latitude, gnss.longitude, gnss.altitude, gnss.timestamp))
 
-    def _gnss_update(self, gnss: GnssPosition | None, now: float, reasons: list[str]) -> tuple[Pose2D, float] | None:
+    def _gnss_update(
+        self,
+        gnss: GnssPosition | None,
+        now: float,
+        reasons: list[str],
+    ) -> tuple[Pose2D, float, float] | None:
         if gnss is None or not self._gnss_usable(gnss, now, reasons):
             return None
         enu = geodetic_to_enu(
@@ -656,6 +808,7 @@ class MultisourceFusionCore:
         return (
             Pose2D(x, y, self._map_pose.yaw if self._map_pose is not None else 0.0, gnss.timestamp),
             compute_gnss_confidence(gnss, self.config),
+            enu.up,
         )
 
     def _uwb_usable(self, uwb: UwbPositionMeasurement, now: float, reasons: list[str]) -> bool:
@@ -816,4 +969,8 @@ class MultisourceFusionCore:
             measurement_confidence=self._last_measurement_confidence,
             adaptive_position_uncertainty=self._adaptive_position_uncertainty,
             adaptive_yaw_uncertainty=self._adaptive_yaw_uncertainty,
+            altitude=self._altitude,
+            altitude_uncertainty=self._altitude_uncertainty,
+            altitude_anchored=self._altitude_anchored,
+            altitude_source=self._altitude_source,
         )

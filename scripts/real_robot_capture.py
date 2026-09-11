@@ -39,11 +39,19 @@ DEFAULT_TOPICS = (
     "/dg/lidar/filtered_scan",
     "/dg/lidar/stable_features",
     "/dg/gnss/quality",
+    "/gps/fix",
+    "/gps/nmea_sentence",
+    "/gps/rtk_status",
     "/dg/uwb/pose",
     "/dg/uwb/quality",
     "/dg/fusion/odom",
     "/dg/fusion/pose",
     "/dg/fusion/status",
+    "/zed/zed_node/odom",
+    "/dg/event_camera/events",
+    "/dg/event_camera/quality",
+    "/dg/mmwave/points",
+    "/dg/mmwave/quality",
     "/dg/navigation/status",
     "/dg/relocalization/seed",
     "/dg/relocalization/match_quality",
@@ -287,6 +295,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--estimated-pose-topic", default="/dg/fusion/pose")
     parser.add_argument("--ground-truth-x", type=float)
     parser.add_argument("--ground-truth-y", type=float)
+    parser.add_argument("--ground-truth-z", type=float)
     parser.add_argument("--ground-truth-frame", default="map")
     parser.add_argument("--repo", default=str(Path(__file__).resolve().parents[1]))
     return parser
@@ -308,13 +317,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if ground_truth_supplied[0] != ground_truth_supplied[1]:
         raise SystemExit("--ground-truth-x and --ground-truth-y must be supplied together")
+    if arguments.ground_truth_z is not None and not all(ground_truth_supplied):
+        raise SystemExit("--ground-truth-z requires --ground-truth-x and --ground-truth-y")
     if not arguments.estimated_pose_topic.startswith("/"):
         raise SystemExit("--estimated-pose-topic must be an absolute ROS topic")
     if not arguments.ground_truth_frame.strip():
         raise SystemExit("--ground-truth-frame must not be empty")
-    if all(ground_truth_supplied) and not all(
-        math.isfinite(value) for value in (arguments.ground_truth_x, arguments.ground_truth_y)
-    ):
+    ground_truth_values = [arguments.ground_truth_x, arguments.ground_truth_y]
+    if arguments.ground_truth_z is not None:
+        ground_truth_values.append(arguments.ground_truth_z)
+    if all(ground_truth_supplied) and not all(math.isfinite(value) for value in ground_truth_values):
         raise SystemExit("ground-truth coordinates must be finite")
     if shutil.which("ros2") is None:
         print("ERROR: ros2 is unavailable; source the ROS 2 and integration workspaces first.", file=sys.stderr)
@@ -362,6 +374,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ground_truth_enabled": all(ground_truth_supplied),
             "ground_truth_x": arguments.ground_truth_x,
             "ground_truth_y": arguments.ground_truth_y,
+            "ground_truth_z": arguments.ground_truth_z,
             "ground_truth_frame": arguments.ground_truth_frame,
         },
         "safety": {
@@ -419,6 +432,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 str(arguments.ground_truth_y),
             ]
         )
+        if arguments.ground_truth_z is not None:
+            evidence_command.extend(["--ground-truth-z", str(arguments.ground_truth_z)])
     evidence_log_handle = (logs / "structured_evidence.log").open("w", encoding="utf-8")
     evidence_process = subprocess.Popen(
         evidence_command,

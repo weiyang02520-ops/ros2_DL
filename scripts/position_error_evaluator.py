@@ -20,6 +20,8 @@ class PositionSample:
     estimated_y: float
     ground_truth_x: float
     ground_truth_y: float
+    estimated_z: Optional[float] = None
+    ground_truth_z: Optional[float] = None
 
 
 @dataclass
@@ -41,36 +43,44 @@ def compute_error(sample: PositionSample) -> float:
     return math.sqrt(dx * dx + dy * dy)
 
 
+def compute_vertical_error(sample: PositionSample) -> Optional[float]:
+    """Compute absolute elevation error when independent Z truth is present."""
+    if sample.estimated_z is None or sample.ground_truth_z is None:
+        return None
+    if not (math.isfinite(sample.estimated_z) and math.isfinite(sample.ground_truth_z)):
+        return None
+    return abs(sample.estimated_z - sample.ground_truth_z)
+
+
+def _metrics_from_errors(errors: List[float]) -> Optional[PositionErrorMetrics]:
+    if not errors:
+        return None
+    errors_sorted = sorted(errors)
+    count = len(errors)
+    p95_index = min(int(count * 0.95), count - 1)
+    return PositionErrorMetrics(
+        count=count,
+        mean=sum(errors) / count,
+        median=errors_sorted[count // 2],
+        rmse=math.sqrt(sum(error * error for error in errors) / count),
+        p95=errors_sorted[p95_index],
+        max_error=max(errors),
+        min_error=min(errors),
+    )
+
+
 def compute_metrics(samples: List[PositionSample]) -> Optional[PositionErrorMetrics]:
     """Compute position error metrics from samples."""
     if not samples:
         return None
 
-    errors = [compute_error(s) for s in samples]
-    errors_sorted = sorted(errors)
+    return _metrics_from_errors([compute_error(sample) for sample in samples])
 
-    count = len(errors)
-    mean_error = sum(errors) / count
-    median_error = errors_sorted[count // 2]
-    rmse = math.sqrt(sum(e * e for e in errors) / count)
 
-    p95_index = int(count * 0.95)
-    if p95_index >= count:
-        p95_index = count - 1
-    p95_error = errors_sorted[p95_index]
-
-    max_error = max(errors)
-    min_error = min(errors)
-
-    return PositionErrorMetrics(
-        count=count,
-        mean=mean_error,
-        median=median_error,
-        rmse=rmse,
-        p95=p95_error,
-        max_error=max_error,
-        min_error=min_error
-    )
+def compute_vertical_metrics(samples: List[PositionSample]) -> Optional[PositionErrorMetrics]:
+    """Compute elevation metrics without treating missing Z truth as zero."""
+    errors = [error for sample in samples if (error := compute_vertical_error(sample)) is not None]
+    return _metrics_from_errors(errors)
 
 
 def read_csv(filepath: str) -> List[PositionSample]:
@@ -84,12 +94,16 @@ def read_csv(filepath: str) -> List[PositionSample]:
         reader = csv.DictReader(f)
         for row in reader:
             try:
+                estimated_z = row.get('estimated_z', '').strip()
+                ground_truth_z = row.get('ground_truth_z', '').strip()
                 sample = PositionSample(
                     timestamp=float(row['timestamp']),
                     estimated_x=float(row['estimated_x']),
                     estimated_y=float(row['estimated_y']),
                     ground_truth_x=float(row['ground_truth_x']),
-                    ground_truth_y=float(row['ground_truth_y'])
+                    ground_truth_y=float(row['ground_truth_y']),
+                    estimated_z=float(estimated_z) if estimated_z else None,
+                    ground_truth_z=float(ground_truth_z) if ground_truth_z else None,
                 )
                 samples.append(sample)
             except (KeyError, ValueError) as e:
@@ -99,9 +113,9 @@ def read_csv(filepath: str) -> List[PositionSample]:
     return samples
 
 
-def print_metrics(metrics: PositionErrorMetrics) -> None:
+def print_metrics(metrics: PositionErrorMetrics, label: str = "Horizontal Position") -> None:
     """Print metrics in human-readable format."""
-    print("Position Error Metrics:")
+    print(f"{label} Error Metrics:")
     print(f"  Sample Count: {metrics.count}")
     print(f"  Mean Error:   {metrics.mean:.4f} m")
     print(f"  Median Error: {metrics.median:.4f} m")
@@ -140,6 +154,10 @@ def main():
         return 1
 
     print_metrics(metrics)
+    vertical_metrics = compute_vertical_metrics(samples)
+    if vertical_metrics is not None:
+        print()
+        print_metrics(vertical_metrics, "Vertical Position")
     return 0
 
 

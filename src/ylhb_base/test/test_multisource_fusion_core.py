@@ -26,6 +26,7 @@ from multisource_fusion_core import (  # noqa: E402
     MapPoseMeasurement,
     MultisourceFusionCore,
     Pose2D,
+    RelativeHeightMeasurement,
     compute_gnss_confidence,
     compute_lidar_confidence,
     estimate_alignment,
@@ -51,11 +52,12 @@ def gnss(
     hdop: float | None = None,
     satellites: float | None = None,
     differential_age: float | None = None,
+    altitude: float = 10.0,
 ) -> GnssPosition:
     return GnssPosition(
         latitude,
         longitude,
-        10.0,
+        altitude,
         timestamp,
         state,
         fresh,
@@ -545,6 +547,61 @@ class FusionCoreTests(unittest.TestCase):
         self.assertLess(after.position_uncertainty, before.position_uncertainty)
         self.assertAlmostEqual(after.yaw_uncertainty, before.yaw_uncertainty, places=9)
         self.assertAlmostEqual(after.map_pose.yaw, before.map_pose.yaw, places=9)  # type: ignore[union-attr]
+
+    def test_gnss_altitude_anchor_is_propagated_by_relative_height(self) -> None:
+        fusion = core(relative_height_delta_gate=0.5)
+        fusion.process(FusionInput(0.0, local_odom=odom(0.0, timestamp=0.0)))
+        fusion.process(
+            FusionInput(
+                0.5,
+                relative_height=RelativeHeightMeasurement(
+                    z=2.0,
+                    timestamp=0.5,
+                    covariance=0.01,
+                    source="ZED_VISUAL_ODOM",
+                ),
+            )
+        )
+        anchored = fusion.process(
+            FusionInput(
+                1.0,
+                local_odom=odom(0.0, timestamp=1.0),
+                gnss=gnss(timestamp=1.0, altitude=11.0),
+            )
+        )
+        self.assertTrue(anchored.altitude_anchored)
+        self.assertAlmostEqual(anchored.altitude, 1.0, places=3)
+        self.assertEqual(anchored.altitude_source, "GNSS")
+
+        propagated = fusion.process(
+            FusionInput(
+                2.0,
+                local_odom=odom(0.0, timestamp=2.0),
+                relative_height=RelativeHeightMeasurement(
+                    z=2.15,
+                    timestamp=2.0,
+                    covariance=0.01,
+                    source="ZED_VISUAL_ODOM",
+                ),
+            )
+        )
+        self.assertAlmostEqual(propagated.altitude, 1.15, places=3)
+        self.assertEqual(propagated.altitude_source, "ZED_VISUAL_ODOM")
+        self.assertTrue(math.isfinite(propagated.altitude_uncertainty))
+
+        reset = fusion.process(
+            FusionInput(
+                3.0,
+                relative_height=RelativeHeightMeasurement(
+                    z=0.0,
+                    timestamp=3.0,
+                    covariance=0.01,
+                    source="ZED_VISUAL_ODOM",
+                ),
+            )
+        )
+        self.assertAlmostEqual(reset.altitude, propagated.altitude, places=9)
+        self.assertIn("RELATIVE_HEIGHT_JUMP", reset.reasons)
 
     def test_lidar_correction_can_reduce_yaw_uncertainty(self) -> None:
         fusion = core()

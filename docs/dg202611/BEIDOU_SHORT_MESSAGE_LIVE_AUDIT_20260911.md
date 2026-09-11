@@ -30,6 +30,18 @@ Outdoor end-to-end verification: NOT RUN
 
 扫描期间没有修改 `/home/nvidia/ros2_DL`，没有发送运动命令，也没有向串口发送配置指令。
 
+2026-09-11 14:50 的复核扫描还确认：机器人运行的是 Jetson Orin Nano、Ubuntu 22.04；`dg202611-models.service` 与 `ylhb-mobile-bridge.service` 均为 active。扫描时基础 bringup 未启动，因此 `/gps/fix` 和 `/gps/rtk_status` 都只有订阅者、没有发布者，这只能说明当时 GNSS 节点未启动，不能当作硬件故障。
+
+原始扫描报告保存在 Windows：
+
+```text
+artifacts/robot_scans/robot_full_scan_20260911_145108.txt
+SHA256 AE63C183E98BC1BD63E64964974016F0535B9DC1EA63B53A598AAF30B1A95CF9
+
+artifacts/robot_scans/beidou_deep_scan_20260911_145243.txt
+SHA256 414E960A5C6A4B2F2D9FFC14FF67105622587A67F390E80E9DEDFF0E207405D9
+```
+
 ## 已确认的真实链路
 
 ### WTRTK980 定位链路

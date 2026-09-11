@@ -19,6 +19,7 @@ from typing import Any, Sequence
 from feature_repeatability_evaluator import compute_metrics as compute_feature_metrics
 from feature_repeatability_evaluator import read_csv as read_feature_csv
 from position_error_evaluator import compute_metrics as compute_position_metrics
+from position_error_evaluator import compute_vertical_metrics
 from position_error_evaluator import read_csv as read_position_csv
 from relocalization_evaluator import compute_metrics as compute_relocalization_metrics
 from relocalization_evaluator import read_csv as read_relocalization_csv
@@ -147,6 +148,7 @@ def evaluate(root: Path, output_dir: Path, match_distance: float) -> dict[str, A
         )
 
     position_metrics = compute_position_metrics(all_position_samples)
+    vertical_metrics = compute_vertical_metrics(all_position_samples)
     relocalization_metrics = compute_relocalization_metrics(all_relocalization_events)
     summary = {
         "schema_version": 1,
@@ -157,6 +159,7 @@ def evaluate(root: Path, output_dir: Path, match_distance: float) -> dict[str, A
         "complete_capture_count": sum(row["capture_status"] == "COMPLETE" for row in session_rows),
         "manifest_valid_count": sum(bool(row["manifest_valid"]) for row in session_rows),
         "position_metrics": None if position_metrics is None else asdict(position_metrics),
+        "vertical_position_metrics": None if vertical_metrics is None else asdict(vertical_metrics),
         "relocalization_metrics": (
             None if relocalization_metrics is None else asdict(relocalization_metrics)
         ),
@@ -193,8 +196,10 @@ def evaluate(root: Path, output_dir: Path, match_distance: float) -> dict[str, A
             "timestamp",
             "estimated_x",
             "estimated_y",
+            "estimated_z",
             "ground_truth_x",
             "ground_truth_y",
+            "ground_truth_z",
         ),
         position_rows,
     )

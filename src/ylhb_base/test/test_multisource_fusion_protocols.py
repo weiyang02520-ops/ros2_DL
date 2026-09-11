@@ -92,6 +92,7 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             '"/dg/fusion/odom"',
             '"/dg/fusion/pose"',
             '"/dg/fusion/status"',
+            '"/zed/zed_node/odom"',
         ):
             self.assertIn(topic, text)
 
@@ -127,6 +128,8 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             "map_enu_yaw",
             "map_enu_offset_x",
             "map_enu_offset_y",
+            "enable_relative_height",
+            "relative_height_odom_topic",
         ):
             self.assertIn(f'"{argument}"', text)
 
@@ -155,6 +158,10 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
     def test_launch_keeps_fusion_as_side_channel(self) -> None:
         text = LAUNCH.read_text(encoding="utf-8")
         self.assertIn('"publish_tf": False', text)
+        self.assertIn(
+            '"relative_height_enabled": ParameterValue(enable_relative_height, value_type=bool)',
+            text,
+        )
         self.assertIn('"fusion_odom_topic": "/dg/fusion/odom"', text)
         self.assertIn('"fusion_status_topic": "/dg/fusion/status"', text)
         self.assertNotIn('"map_to_odom_topic"', text)
