@@ -46,6 +46,8 @@ def test_capture_topics_cover_all_three_models_and_uwb():
         "/zed/zed_node/odom",
         "/dg/event_camera/events",
         "/dg/event_camera/quality",
+        "/dg/event_camera/features",
+        "/dg/event_camera/feature_quality",
         "/dg/mmwave/points",
         "/dg/mmwave/quality",
     }

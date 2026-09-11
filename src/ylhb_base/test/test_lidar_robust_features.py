@@ -9,9 +9,12 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from lidar_robust_features import (  # noqa: E402
+    DynamicDetection2D,
+    DynamicSector,
     RobustFeatureConfig,
     ScanFrame,
     compensate_previous_points,
+    dynamic_sector_from_detection,
     process_scan,
 )
 
@@ -104,6 +107,50 @@ class LidarRobustFeatureTests(unittest.TestCase):
         result = process_scan(previous, previous, (0.1, 0.0, 0.0))
         compensated = compensate_previous_points(result.points, (0.1, 0.0, 0.0))
         self.assertAlmostEqual(compensated[0].x, result.points[0].x - 0.1)
+
+    def test_mmwave_detection_is_quality_gated_and_transformed(self) -> None:
+        accepted = dynamic_sector_from_detection(
+            DynamicDetection2D(1.0, 0.0, 0.4, 12.0, 0.9),
+            (0.0, 1.0, math.pi / 2.0),
+            min_abs_velocity=0.15,
+            min_snr=5.0,
+            min_confidence=0.5,
+            angular_half_width=0.08,
+            radial_margin=0.35,
+        )
+        self.assertIsNotNone(accepted)
+        assert accepted is not None
+        self.assertAlmostEqual(accepted.angle, math.pi / 2.0)
+        self.assertAlmostEqual(accepted.range, 2.0)
+
+        rejected = dynamic_sector_from_detection(
+            DynamicDetection2D(1.0, 0.0, 0.05, 12.0, 0.9),
+            (0.0, 0.0, 0.0),
+            min_abs_velocity=0.15,
+            min_snr=5.0,
+            min_confidence=0.5,
+            angular_half_width=0.08,
+            radial_margin=0.35,
+        )
+        self.assertIsNone(rejected)
+
+    def test_mmwave_sector_masks_temporally_stable_lidar_return(self) -> None:
+        frame = ScanFrame([2.0] * 5, -0.2, 0.1, 0.05, 8.0)
+        sector = DynamicSector(angle=0.0, range=2.0, angular_half_width=0.01, radial_margin=0.01)
+        result = process_scan(frame, frame, external_dynamic_sectors=[sector])
+        masked = [item.point.index for item in result.classifications if item.dynamic_candidate]
+        self.assertEqual(masked, [2])
+        self.assertEqual(result.quality["auxiliary_dynamic_sector_count"], 1)
+        self.assertEqual(result.quality["auxiliary_dynamic_point_count"], 1)
+        self.assertEqual(result.quality["temporal_dynamic_candidate_count"], 0)
+        self.assertAlmostEqual(result.quality["raw_temporal_match_ratio"], 1.0)
+        self.assertAlmostEqual(result.quality["temporal_match_ratio"], 1.0)
+
+    def test_no_previous_frame_without_auxiliary_sector_preserves_unknown_ratio(self) -> None:
+        result = process_scan(ScanFrame([1.0, 1.0, 1.0], -0.1, 0.1, 0.05, 8.0))
+        self.assertIsNone(result.temporal_match_ratio)
+        self.assertIsNone(result.quality["temporal_match_ratio"])
+        self.assertIsNone(result.quality["raw_temporal_match_ratio"])
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import argparse
 import copy
 import math
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,15 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from lidar_robust_features import RobustFeatureConfig, ScanFrame, process_scan  # noqa: E402
+from lidar_robust_features import (  # noqa: E402
+    DynamicDetection2D,
+    DynamicSector,
+    RobustFeatureConfig,
+    ScanFrame,
+    dynamic_sector_from_detection,
+    process_scan,
+)
+from pointcloud_reader import read_named_points  # noqa: E402
 
 
 def _yaw_from_quaternion(quaternion: Any) -> float:
@@ -67,7 +76,7 @@ def create_node(node_name: str) -> Any:
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
-    from sensor_msgs.msg import LaserScan
+    from sensor_msgs.msg import LaserScan, PointCloud2
 
     class LidarRobustNode(Node):
         def __init__(self) -> None:
@@ -86,6 +95,18 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("corner_neighbor_distance", 0.35)
             self.declare_parameter("line_neighbor_distance", 0.25)
             self.declare_parameter("min_line_points", 3)
+            self.declare_parameter("mmwave_dynamic_mask_enabled", False)
+            self.declare_parameter("mmwave_points_topic", "/dg/mmwave/points")
+            self.declare_parameter("mmwave_expected_frame_id", "mmwave_link")
+            self.declare_parameter("mmwave_timeout_sec", 0.25)
+            self.declare_parameter("mmwave_to_lidar_x", 0.0)
+            self.declare_parameter("mmwave_to_lidar_y", 0.0)
+            self.declare_parameter("mmwave_to_lidar_yaw", 0.0)
+            self.declare_parameter("mmwave_min_abs_velocity", 0.15)
+            self.declare_parameter("mmwave_min_snr", 5.0)
+            self.declare_parameter("mmwave_min_confidence", 0.5)
+            self.declare_parameter("mmwave_angular_half_width", 0.08)
+            self.declare_parameter("mmwave_radial_margin", 0.35)
 
             config = _config_from_node(self)
             self._config = config
@@ -93,6 +114,31 @@ def create_node(node_name: str) -> Any:
             self._previous_odom_pose: tuple[float, float, float] | None = None
             self._latest_odom_pose: tuple[float, float, float] | None = None
             self._warned_without_odom = False
+            self._mmwave_enabled = bool(self.get_parameter("mmwave_dynamic_mask_enabled").value)
+            self._mmwave_timeout_sec = float(self.get_parameter("mmwave_timeout_sec").value)
+            self._mmwave_expected_frame_id = str(self.get_parameter("mmwave_expected_frame_id").value)
+            self._mmwave_to_lidar = (
+                float(self.get_parameter("mmwave_to_lidar_x").value),
+                float(self.get_parameter("mmwave_to_lidar_y").value),
+                float(self.get_parameter("mmwave_to_lidar_yaw").value),
+            )
+            self._mmwave_gate = {
+                "min_abs_velocity": float(self.get_parameter("mmwave_min_abs_velocity").value),
+                "min_snr": float(self.get_parameter("mmwave_min_snr").value),
+                "min_confidence": float(self.get_parameter("mmwave_min_confidence").value),
+                "angular_half_width": float(self.get_parameter("mmwave_angular_half_width").value),
+                "radial_margin": float(self.get_parameter("mmwave_radial_margin").value),
+            }
+            numeric_parameters = (self._mmwave_timeout_sec, *self._mmwave_to_lidar, *self._mmwave_gate.values())
+            if any(not math.isfinite(value) for value in numeric_parameters):
+                raise ValueError("mmWave dynamic-mask parameters must be finite")
+            if self._mmwave_timeout_sec <= 0.0 or any(value < 0.0 for value in self._mmwave_gate.values()):
+                raise ValueError("mmWave timeout must be positive and gate thresholds non-negative")
+            self._latest_dynamic_sectors: tuple[DynamicSector, ...] = ()
+            self._mmwave_received_at: float | None = None
+            self._mmwave_input_count = 0
+            self._mmwave_reject_reason = "DISABLED" if not self._mmwave_enabled else "NO_MESSAGE"
+            self._mmwave_frame_id = ""
             scan_topic = str(self.get_parameter("scan_topic").value)
             odom_topic = str(self.get_parameter("odom_topic").value)
             self._filtered_pub = self.create_publisher(LaserScan, str(self.get_parameter("filtered_scan_topic").value), 10)
@@ -100,6 +146,13 @@ def create_node(node_name: str) -> Any:
             self._quality_pub = self.create_publisher(DiagnosticArray, str(self.get_parameter("quality_topic").value), 10)
             self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
             self.create_subscription(LaserScan, scan_topic, self._on_scan, qos_profile_sensor_data)
+            if self._mmwave_enabled:
+                mmwave_topic = str(self.get_parameter("mmwave_points_topic").value)
+                self.create_subscription(PointCloud2, mmwave_topic, self._on_mmwave, qos_profile_sensor_data)
+                self.get_logger().info(
+                    f"mmWave dynamic mask enabled on {mmwave_topic}; expected frame "
+                    f"{self._mmwave_expected_frame_id}"
+                )
             self.get_logger().info(
                 f"side-channel LiDAR robustness POC active: {scan_topic} + {odom_topic}; "
                 "existing scan consumers are not replaced"
@@ -107,6 +160,50 @@ def create_node(node_name: str) -> Any:
 
         def _on_odom(self, message: Any) -> None:
             self._latest_odom_pose = _odom_pose(message)
+
+        def _on_mmwave(self, message: Any) -> None:
+            self._mmwave_frame_id = str(message.header.frame_id)
+            self._mmwave_input_count = int(message.width) * int(message.height)
+            if self._mmwave_frame_id != self._mmwave_expected_frame_id:
+                self._latest_dynamic_sectors = ()
+                self._mmwave_received_at = None
+                self._mmwave_reject_reason = "FRAME_MISMATCH"
+                return
+            required_fields = ("x", "y", "radial_velocity", "snr_db", "confidence")
+            available_fields = {field.name for field in message.fields}
+            missing = [name for name in required_fields if name not in available_fields]
+            if missing:
+                self._latest_dynamic_sectors = ()
+                self._mmwave_received_at = None
+                self._mmwave_reject_reason = "MISSING_FIELDS:" + ",".join(missing)
+                return
+            sectors: list[DynamicSector] = []
+            try:
+                rows = read_named_points(message, required_fields)
+                for row in rows:
+                    values = tuple(row)
+                    detection = DynamicDetection2D(
+                        x=float(values[0]),
+                        y=float(values[1]),
+                        radial_velocity=float(values[2]),
+                        snr=float(values[3]),
+                        confidence=float(values[4]),
+                    )
+                    sector = dynamic_sector_from_detection(
+                        detection,
+                        self._mmwave_to_lidar,
+                        **self._mmwave_gate,
+                    )
+                    if sector is not None:
+                        sectors.append(sector)
+            except (TypeError, ValueError, IndexError, RuntimeError) as exc:
+                self._latest_dynamic_sectors = ()
+                self._mmwave_received_at = None
+                self._mmwave_reject_reason = f"PARSE_ERROR:{type(exc).__name__}"
+                return
+            self._latest_dynamic_sectors = tuple(sectors)
+            self._mmwave_received_at = time.monotonic()
+            self._mmwave_reject_reason = "ACCEPTED"
 
         def _on_scan(self, message: Any) -> None:
             frame = ScanFrame(
@@ -122,14 +219,40 @@ def create_node(node_name: str) -> Any:
             elif self._previous_frame is not None and not self._warned_without_odom:
                 self.get_logger().warning("no two odometry poses yet; temporal compensation is not available")
                 self._warned_without_odom = True
+            mmwave_fresh = (
+                self._mmwave_enabled
+                and self._mmwave_received_at is not None
+                and time.monotonic() - self._mmwave_received_at <= self._mmwave_timeout_sec
+            )
+            external_dynamic_sectors = self._latest_dynamic_sectors if mmwave_fresh else ()
             try:
-                result = process_scan(frame, self._previous_frame, relative_pose, self._config)
+                result = process_scan(
+                    frame,
+                    self._previous_frame,
+                    relative_pose,
+                    self._config,
+                    external_dynamic_sectors,
+                )
             except ValueError as exc:
                 self.get_logger().error(f"invalid LaserScan for robustness POC: {exc}")
                 return
             self._publish_filtered_scan(message, result)
             self._publish_features(message, result)
-            self._publish_quality(message, result.quality)
+            quality = dict(result.quality)
+            quality.update(
+                {
+                    "auxiliary_dynamic_mask_enabled": self._mmwave_enabled,
+                    "auxiliary_dynamic_data_fresh": mmwave_fresh,
+                    "auxiliary_dynamic_input_count": self._mmwave_input_count,
+                    "auxiliary_dynamic_frame_id": self._mmwave_frame_id,
+                    "auxiliary_dynamic_reject_reason": (
+                        self._mmwave_reject_reason
+                        if mmwave_fresh or self._mmwave_reject_reason != "ACCEPTED"
+                        else "STALE"
+                    ),
+                }
+            )
+            self._publish_quality(message, quality)
             self._previous_frame = frame
             self._previous_odom_pose = self._latest_odom_pose
 

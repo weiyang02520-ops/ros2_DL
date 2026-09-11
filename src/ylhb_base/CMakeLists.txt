@@ -114,6 +114,8 @@ install(PROGRAMS
   scripts/cmd_vel_arbiter_core.py
   scripts/multisource_fusion_core.py
   scripts/auxiliary_sensor_data.py
+  scripts/event_feature_core.py
+  scripts/pointcloud_reader.py
   scripts/uwb_data_model.py
   scripts/uwb_input.py
   scripts/uwb_2d_estimator.py
@@ -142,6 +144,8 @@ install(PROGRAMS scripts/evidence_capture_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME evidence_capture_node)
 install(PROGRAMS scripts/auxiliary_sensor_replay_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME auxiliary_sensor_replay_node)
+install(PROGRAMS scripts/event_feature_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME event_feature_node)
 install(PROGRAMS scripts/invalid_candidate_injector_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME invalid_candidate_injector_node)
 
@@ -210,6 +214,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_navigation_protocols test/test_navigation_protocols.py)
   ament_add_pytest_test(test_multisource_fusion_core test/test_multisource_fusion_core.py)
   ament_add_pytest_test(test_multisource_fusion_protocols test/test_multisource_fusion_protocols.py)
+  ament_add_pytest_test(test_event_feature_core test/test_event_feature_core.py)
+  ament_add_pytest_test(test_pointcloud_reader test/test_pointcloud_reader.py)
   ament_add_pytest_test(test_uwb_model1_integration test/test_uwb_model1_integration.py)
   ament_add_pytest_test(test_uwb_model3_compatibility test/test_uwb_model3_compatibility.py)
   ament_add_pytest_test(test_position_error_evaluator test/test_position_error_evaluator.py)

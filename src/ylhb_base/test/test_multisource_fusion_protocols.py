@@ -28,6 +28,8 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             "multisource_fusion_node.py",
             "auxiliary_sensor_data.py",
             "auxiliary_sensor_replay_node.py",
+            "event_feature_core.py",
+            "event_feature_node.py",
         ):
             ast.parse((SCRIPTS / name).read_text(encoding="utf-8"))
 
@@ -130,6 +132,13 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             "map_enu_offset_y",
             "enable_relative_height",
             "relative_height_odom_topic",
+            "enable_mmwave_dynamic_mask",
+            "mmwave_expected_frame_id",
+            "mmwave_to_lidar_x",
+            "mmwave_to_lidar_y",
+            "mmwave_to_lidar_yaw",
+            "enable_event_feature_processing",
+            "event_feature_match_distance_px",
         ):
             self.assertIn(f'"{argument}"', text)
 
@@ -141,6 +150,22 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             self.assertIn(f'"data_topic": "{data_topic}"', text)
             self.assertIn(f'"quality_topic": "{quality_topic}"', text)
             self.assertIn(f'"enable_{sensor}_replay"', text)
+
+        self.assertIn('"mmwave_dynamic_mask_enabled": ParameterValue(', text)
+        self.assertIn('"mmwave_points_topic": "/dg/mmwave/points"', text)
+        self.assertIn('executable="event_feature_node"', text)
+        self.assertIn('"features_topic": "/dg/event_camera/features"', text)
+        self.assertIn('"quality_topic": "/dg/event_camera/feature_quality"', text)
+
+    def test_mmwave_dynamic_mask_is_safe_by_default(self) -> None:
+        launch = LAUNCH.read_text(encoding="utf-8")
+        marker = '"enable_mmwave_dynamic_mask",\n                default_value="false"'
+        self.assertIn(marker, launch)
+        node = (SCRIPTS / "lidar_robust_node.py").read_text(encoding="utf-8")
+        self.assertIn('self.declare_parameter("mmwave_dynamic_mask_enabled", False)', node)
+        self.assertIn('self.declare_parameter("mmwave_points_topic", "/dg/mmwave/points")', node)
+        self.assertIn('(\"x\", \"y\", \"radial_velocity\", \"snr_db\", \"confidence\")', node)
+        self.assertNotIn('create_publisher(Twist', node)
 
     def test_launch_alignment_parameters_are_explicit_float_values(self) -> None:
         text = LAUNCH.read_text(encoding="utf-8")
@@ -172,8 +197,11 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         self.assertIn("scripts/multisource_fusion_node.py", text)
         self.assertIn("scripts/auxiliary_sensor_data.py", text)
         self.assertIn("scripts/auxiliary_sensor_replay_node.py", text)
+        self.assertIn("scripts/event_feature_core.py", text)
+        self.assertIn("scripts/event_feature_node.py", text)
         self.assertIn("test_multisource_fusion_core", text)
         self.assertIn("test_multisource_fusion_protocols", text)
+        self.assertIn("test_event_feature_core", text)
 
     def test_default_ekf_and_bringup_are_not_wired_to_fusion(self) -> None:
         launch = LAUNCH.read_text(encoding="utf-8")

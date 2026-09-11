@@ -50,6 +50,8 @@ DEFAULT_TOPICS = (
     "/zed/zed_node/odom",
     "/dg/event_camera/events",
     "/dg/event_camera/quality",
+    "/dg/event_camera/features",
+    "/dg/event_camera/feature_quality",
     "/dg/mmwave/points",
     "/dg/mmwave/quality",
     "/dg/navigation/status",
@@ -95,6 +97,7 @@ PARAMETER_NODES = (
     "/dg_active_relocalization_node",
     "/dg_navigation_health_node",
     "/dg_uwb_replay_node",
+    "/dg_event_feature_node",
 )
 
 

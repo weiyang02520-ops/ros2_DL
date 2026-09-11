@@ -8,10 +8,12 @@
 事件相机真实驱动:       等待 RDK X5 与相机
 事件相机官方 CSV 解析:  已完成
 事件相机 ROS 2 回放:    已完成
+事件特征/重复率侧链:    已完成，等待真实数据调参
 毫米波真实驱动:         等待实物和厂商协议
 毫米波规范化 CSV 解析:  已完成
 毫米波 ROS 2 回放:      已完成
-真实传感器算法融合:     等待数据、标定和验证
+毫米波辅助动态点剔除:   已完成，默认关闭，等待协议/外参/真实数据验证
+真实传感器指标验收:     等待数据、标定和验证
 ```
 
 “回放节点能够运行”只能证明接口和数据链路可用，不能写成硬件实测完成或算法已经提高指标。
@@ -29,6 +31,9 @@ EVS MIPI 模块
   -> auxiliary_sensor_replay_node
   -> /dg/event_camera/events (sensor_msgs/PointCloud2)
   -> /dg/event_camera/quality (diagnostic_msgs/DiagnosticArray)
+  -> event_feature_node
+  -> /dg/event_camera/features (sensor_msgs/PointCloud2)
+  -> /dg/event_camera/feature_quality (diagnostic_msgs/DiagnosticArray)
 ```
 
 官方 CSV 契约：
@@ -53,6 +58,8 @@ x,y,polarity,timestamp
 
 RDK X5 和 Jetson 是两台计算机。相机先接 RDK X5；真实运行时可以在 RDK X5 上转换/发布，Jetson 通过同一局域网接收 ROS 2 话题。不能把 MIPI 排线直接插到 Jetson 并假设厂商驱动兼容。
 
+`event_feature_node` 按固定像素网格聚合事件，过滤单个热像素和稀疏噪声，并用一对一空间匹配计算相邻事件包的重复率。该结果处于相机像素坐标系，只用于事件相机质量和特征证据；没有相机到激光外参及运动补偿前，不会被当成机器人绝对位姿或直接控制依据。
+
 ## 毫米波雷达链路
 
 当前没有拿到 HU293 对应的权威数据手册和包格式，代码没有猜串口字节。先保留每个原始字节，再用厂商协议转换成下面的规范化 CSV：
@@ -66,6 +73,8 @@ timestamp_us,frame_id,track_id,x_m,y_m,z_m,radial_velocity_mps,snr_db,confidence
 
 - `/dg/mmwave/points`：`sensor_msgs/PointCloud2`，含 x/y/z、径向速度、SNR、置信度和 track ID；
 - `/dg/mmwave/quality`：检测数量、动态检测数量、轨迹数量和质量统计。
+
+启用 `enable_mmwave_dynamic_mask` 后，MODEL-2 只接受 frame、时间新鲜度、径向速度、SNR 和置信度均合格的检测，再根据 `mmwave_to_lidar_x/y/yaw` 转到激光坐标系，剔除同方位、同距离的激光点。诊断同时保留纯激光的 `raw_temporal_match_ratio` 和融合后的动态扇区/点数量，便于证明毫米波是否真正被消费。该开关默认关闭；安装外参未测量前不得在正式结果中启用。
 
 实物到手后必须先向商家取得：完整型号、UART/CAN 选择、电压和电平、引脚、波特率/CAN 速率、帧头帧尾、字节序、校验、坐标轴、单位、最大目标数、输出频率和 ROS/上位机资料。只要这些信息确定，厂商解码器可以接在规范化 CSV 或上述 ROS 2 接口前，不需要改三模型的外部接口。
 
@@ -105,6 +114,7 @@ ros2 launch ylhb_base dg_navigation_integration.launch.py \
   enable_nav2:=false \
   enable_cmd_vel_arbiter:=false \
   enable_event_camera_replay:=true \
+  enable_event_feature_processing:=true \
   event_camera_input_file:=/data/events.csv
 ```
 
@@ -115,6 +125,10 @@ ros2 launch ylhb_base dg_navigation_integration.launch.py \
   enable_nav2:=false \
   enable_cmd_vel_arbiter:=false \
   enable_mmwave_replay:=true \
+  enable_mmwave_dynamic_mask:=true \
+  mmwave_to_lidar_x:=<实测米> \
+  mmwave_to_lidar_y:=<实测米> \
+  mmwave_to_lidar_yaw:=<实测弧度> \
   mmwave_input_file:=/data/mmwave.csv
 ```
 
@@ -123,12 +137,15 @@ ros2 launch ylhb_base dg_navigation_integration.launch.py \
 ```bash
 ros2 topic info /dg/event_camera/events -v
 ros2 topic echo /dg/event_camera/quality --once
+ros2 topic info /dg/event_camera/features -v
+ros2 topic echo /dg/event_camera/feature_quality --once
 ros2 topic info /dg/mmwave/points -v
 ros2 topic echo /dg/mmwave/quality --once
+ros2 topic echo /dg/lidar/quality --once
 ros2 topic info /cmd_vel -v
 ```
 
-通过条件是数据话题持续更新、诊断显示 `source_kind=MEASURED_REPLAY`、时间戳和 frame 正确、验证 JSON 的哈希对应原始文件，并且新增节点不是 `/cmd_vel` 发布者。
+通过条件是数据话题持续更新、诊断显示 `source_kind=MEASURED_REPLAY`、时间戳和 frame 正确、验证 JSON 的哈希对应原始文件，事件特征节点报告有效相邻包，MODEL-2 报告实际掩蔽的毫米波动态扇区/点，并且新增节点不是 `/cmd_vel` 发布者。
 
 ## 到货后的最小数据集
 
@@ -149,8 +166,8 @@ ros2 topic info /cmd_vel -v
 
 ## 后续与三模型的连接
 
-- MODEL-2：毫米波动态目标位置可用于标记激光扫描中的动态扇区；事件相机可提供相邻时间窗运动活动和视觉特征重复证据。
+- MODEL-2：毫米波动态目标位置标记激光扫描中的动态扇区的软件链路已实现；事件相机已有相邻时间窗特征和重复率证据链路。两者仍需真实协议、时间同步和外参验证后启用。
 - MODEL-1：只有在外参、时钟和误差模型验证后，毫米波/事件视觉里程计才可作为测量源；原始点和事件不能直接当作绝对位姿。
 - MODEL-3：可把经过验证的事件运动估计或毫米波稳定结构作为候选验证证据；当前不允许单一辅助传感器直接触发恢复运动。
 
-这三条算法连接将在真实数据到手后启用。当前先固定接口，避免为了“看起来融合了”而把未经标定的数据写进定位状态。
+当前已经把能在无硬件条件下确定的算法和接口写好。真实数据到手后进行协议适配、外参测量和阈值冻结；未标定数据不会写进定位状态。

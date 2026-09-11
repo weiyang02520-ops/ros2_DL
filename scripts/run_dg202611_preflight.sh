@@ -73,6 +73,8 @@ run_check "IMPORT_UWB_ESTIMATOR" python3 -c "import uwb_2d_estimator"
 run_check "IMPORT_UWB_QUALITY" python3 -c "import uwb_quality_gate"
 run_check "IMPORT_UWB_INPUT" python3 -c "import uwb_input"
 run_check "IMPORT_AUX_SENSOR_DATA" python3 -c "import auxiliary_sensor_data"
+run_check "IMPORT_EVENT_FEATURE_CORE" python3 -c "import event_feature_core"
+run_check "IMPORT_POINTCLOUD_READER" python3 -c "import pointcloud_reader"
 
 # Step 3: Unit tests
 echo ""
@@ -87,6 +89,8 @@ run_check "UWB_TESTS" python3 -m pytest src/ylhb_base/test/test_uwb_model1_integ
 run_check "UWB_MEASURED_EVIDENCE_TEST" python3 -m pytest src/ylhb_base/test/test_measured_uwb_analysis.py -v --tb=no
 run_check "INTEGRATION_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_navigation_protocols.py -v --tb=no
 run_check "AUX_SENSOR_PROTOCOL_TEST" python3 -m pytest src/ylhb_base/test/test_multisource_fusion_protocols.py -v --tb=no
+run_check "EVENT_FEATURE_TEST" python3 -m pytest src/ylhb_base/test/test_event_feature_core.py -v --tb=no
+run_check "POINTCLOUD_READER_TEST" python3 -m pytest src/ylhb_base/test/test_pointcloud_reader.py -v --tb=no
 
 # Step 4: System scenarios
 echo ""

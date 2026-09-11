@@ -67,6 +67,80 @@ class ScanPoint:
 
 
 @dataclass(frozen=True)
+class DynamicSector:
+    """A range-bearing region independently reported as dynamic."""
+
+    angle: float
+    range: float
+    angular_half_width: float
+    radial_margin: float
+
+    def __post_init__(self) -> None:
+        values = (self.angle, self.range, self.angular_half_width, self.radial_margin)
+        if any(not _finite(value) for value in values):
+            raise ValueError("dynamic sector values must be finite")
+        if self.range < 0.0 or self.angular_half_width < 0.0 or self.radial_margin < 0.0:
+            raise ValueError("dynamic sector range and margins must be non-negative")
+
+
+@dataclass(frozen=True)
+class DynamicDetection2D:
+    """Normalized moving-object observation in an auxiliary sensor frame."""
+
+    x: float
+    y: float
+    radial_velocity: float
+    snr: float
+    confidence: float
+
+
+def dynamic_sector_from_detection(
+    detection: DynamicDetection2D,
+    sensor_to_lidar: tuple[float, float, float],
+    *,
+    min_abs_velocity: float,
+    min_snr: float,
+    min_confidence: float,
+    angular_half_width: float,
+    radial_margin: float,
+) -> DynamicSector | None:
+    """Transform and quality-gate one radar detection into the LiDAR frame."""
+
+    values = (
+        detection.x,
+        detection.y,
+        detection.radial_velocity,
+        detection.snr,
+        detection.confidence,
+        *sensor_to_lidar,
+        min_abs_velocity,
+        min_snr,
+        min_confidence,
+        angular_half_width,
+        radial_margin,
+    )
+    if any(not _finite(value) for value in values):
+        return None
+    if (
+        abs(detection.radial_velocity) < min_abs_velocity
+        or detection.snr < min_snr
+        or detection.confidence < min_confidence
+    ):
+        return None
+    offset_x, offset_y, yaw = sensor_to_lidar
+    cosine = math.cos(yaw)
+    sine = math.sin(yaw)
+    x = cosine * detection.x - sine * detection.y + offset_x
+    y = sine * detection.x + cosine * detection.y + offset_y
+    return DynamicSector(
+        angle=math.atan2(y, x),
+        range=math.hypot(x, y),
+        angular_half_width=angular_half_width,
+        radial_margin=radial_margin,
+    )
+
+
+@dataclass(frozen=True)
 class ClassifiedPoint:
     point: ScanPoint
     stable: bool
@@ -207,6 +281,35 @@ def temporal_classify(
     return classifications, ratio
 
 
+def apply_dynamic_sectors(
+    classifications: Sequence[ClassifiedPoint],
+    sectors: Sequence[DynamicSector],
+    temporal_ratio: float | None,
+) -> tuple[list[ClassifiedPoint], set[int], float | None]:
+    """Remove independently confirmed moving sectors from temporal features."""
+
+    if not sectors:
+        return list(classifications), set(), temporal_ratio
+    masked: set[int] = set()
+    result: list[ClassifiedPoint] = []
+    for item in classifications:
+        point = item.point
+        external_dynamic = any(
+            abs(math.atan2(math.sin(point.angle - sector.angle), math.cos(point.angle - sector.angle)))
+            <= sector.angular_half_width + 1e-12
+            and abs(point.range - sector.range) <= sector.radial_margin + 1e-12
+            for sector in sectors
+        )
+        if external_dynamic:
+            masked.add(point.index)
+            result.append(ClassifiedPoint(point, False, True, item.temporal_distance))
+        else:
+            result.append(item)
+    remaining = [item for item in result if item.point.index not in masked]
+    ratio = sum(item.stable for item in remaining) / len(remaining) if remaining else 0.0
+    return result, masked, ratio
+
+
 def _interior_angle(previous: ScanPoint, current: ScanPoint, following: ScanPoint) -> float:
     first_x = previous.x - current.x
     first_y = previous.y - current.y
@@ -278,6 +381,7 @@ def process_scan(
     previous_frame: ScanFrame | None = None,
     relative_pose: tuple[float, float, float] = (0.0, 0.0, 0.0),
     config: RobustFeatureConfig | None = None,
+    external_dynamic_sectors: Sequence[DynamicSector] = (),
 ) -> FrameResult:
     """Run the complete POC pipeline for one scan."""
 
@@ -285,11 +389,16 @@ def process_scan(
     points, rejected, initial_rejected_count = scan_to_points(frame, config)
     points, isolated = remove_isolated_points(points, config)
     rejected = set(rejected) | isolated
-    classifications, temporal_ratio = temporal_classify(
+    classifications, raw_temporal_ratio = temporal_classify(
         points,
         None if previous_frame is None else _clean_previous_points(previous_frame, config),
         relative_pose,
         config,
+    )
+    classifications, externally_masked, temporal_ratio = apply_dynamic_sectors(
+        classifications,
+        external_dynamic_sectors,
+        raw_temporal_ratio,
     )
     features = extract_stable_features(classifications, config)
     stable_points = [item.point for item in classifications if item.stable]
@@ -303,10 +412,17 @@ def process_scan(
         "valid_ratio": valid_ratio,
         "outlier_count": initial_rejected_count + len(isolated),
         "dynamic_candidate_count": dynamic_count,
+        "temporal_dynamic_candidate_count": sum(
+            item.dynamic_candidate and item.point.index not in externally_masked
+            for item in classifications
+        ),
+        "auxiliary_dynamic_sector_count": len(external_dynamic_sectors),
+        "auxiliary_dynamic_point_count": len(externally_masked),
         "stable_point_count": len(stable_points),
         "feature_count": len(features),
         "angular_coverage": angular_coverage,
         "temporal_match_ratio": temporal_ratio,
+        "raw_temporal_match_ratio": raw_temporal_ratio,
         "geometry_score": geometry_score,
         "temporal_status": "NO_PREVIOUS_FRAME" if previous_frame is None else "COMPARED",
     }

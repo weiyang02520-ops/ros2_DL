@@ -35,7 +35,9 @@ def generate_launch_description():
     enable_scan_map = LaunchConfiguration("enable_scan_map")
     enable_uwb_replay = LaunchConfiguration("enable_uwb_replay")
     enable_event_camera_replay = LaunchConfiguration("enable_event_camera_replay")
+    enable_event_feature_processing = LaunchConfiguration("enable_event_feature_processing")
     enable_mmwave_replay = LaunchConfiguration("enable_mmwave_replay")
+    enable_mmwave_dynamic_mask = LaunchConfiguration("enable_mmwave_dynamic_mask")
     enable_relative_height = LaunchConfiguration("enable_relative_height")
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_file = LaunchConfiguration("map")
@@ -47,8 +49,19 @@ def generate_launch_description():
     event_camera_input_file = LaunchConfiguration("event_camera_input_file")
     event_camera_replay_rate_hz = LaunchConfiguration("event_camera_replay_rate_hz")
     event_camera_window_us = LaunchConfiguration("event_camera_window_us")
+    event_feature_match_distance_px = LaunchConfiguration("event_feature_match_distance_px")
     mmwave_input_file = LaunchConfiguration("mmwave_input_file")
     mmwave_replay_rate_hz = LaunchConfiguration("mmwave_replay_rate_hz")
+    mmwave_expected_frame_id = LaunchConfiguration("mmwave_expected_frame_id")
+    mmwave_timeout_sec = LaunchConfiguration("mmwave_timeout_sec")
+    mmwave_to_lidar_x = LaunchConfiguration("mmwave_to_lidar_x")
+    mmwave_to_lidar_y = LaunchConfiguration("mmwave_to_lidar_y")
+    mmwave_to_lidar_yaw = LaunchConfiguration("mmwave_to_lidar_yaw")
+    mmwave_min_abs_velocity = LaunchConfiguration("mmwave_min_abs_velocity")
+    mmwave_min_snr = LaunchConfiguration("mmwave_min_snr")
+    mmwave_min_confidence = LaunchConfiguration("mmwave_min_confidence")
+    mmwave_angular_half_width = LaunchConfiguration("mmwave_angular_half_width")
+    mmwave_radial_margin = LaunchConfiguration("mmwave_radial_margin")
     relative_height_odom_topic = LaunchConfiguration("relative_height_odom_topic")
     uwb_alignment_enabled = LaunchConfiguration("uwb_alignment_enabled")
     uwb_to_map_yaw = LaunchConfiguration("uwb_to_map_yaw")
@@ -89,6 +102,28 @@ def generate_launch_description():
                 "filtered_scan_topic": "/dg/lidar/filtered_scan",
                 "stable_features_topic": "/dg/lidar/stable_features",
                 "quality_topic": "/dg/lidar/quality",
+                "mmwave_dynamic_mask_enabled": ParameterValue(
+                    enable_mmwave_dynamic_mask, value_type=bool
+                ),
+                "mmwave_points_topic": "/dg/mmwave/points",
+                "mmwave_expected_frame_id": mmwave_expected_frame_id,
+                "mmwave_timeout_sec": ParameterValue(mmwave_timeout_sec, value_type=float),
+                "mmwave_to_lidar_x": ParameterValue(mmwave_to_lidar_x, value_type=float),
+                "mmwave_to_lidar_y": ParameterValue(mmwave_to_lidar_y, value_type=float),
+                "mmwave_to_lidar_yaw": ParameterValue(mmwave_to_lidar_yaw, value_type=float),
+                "mmwave_min_abs_velocity": ParameterValue(
+                    mmwave_min_abs_velocity, value_type=float
+                ),
+                "mmwave_min_snr": ParameterValue(mmwave_min_snr, value_type=float),
+                "mmwave_min_confidence": ParameterValue(
+                    mmwave_min_confidence, value_type=float
+                ),
+                "mmwave_angular_half_width": ParameterValue(
+                    mmwave_angular_half_width, value_type=float
+                ),
+                "mmwave_radial_margin": ParameterValue(
+                    mmwave_radial_margin, value_type=float
+                ),
             }
         ],
     )
@@ -137,6 +172,24 @@ def generate_launch_description():
                 "frame_id": "event_camera_optical_frame",
                 "data_topic": "/dg/event_camera/events",
                 "quality_topic": "/dg/event_camera/quality",
+            }
+        ],
+    )
+    event_feature = Node(
+        package="ylhb_base",
+        executable="event_feature_node",
+        name="dg_event_feature_node",
+        output="screen",
+        condition=IfCondition(enable_event_feature_processing),
+        parameters=[
+            {
+                "events_topic": "/dg/event_camera/events",
+                "features_topic": "/dg/event_camera/features",
+                "quality_topic": "/dg/event_camera/feature_quality",
+                "expected_frame_id": "event_camera_optical_frame",
+                "match_distance_px": ParameterValue(
+                    event_feature_match_distance_px, value_type=float
+                ),
             }
         ],
     )
@@ -307,12 +360,33 @@ def generate_launch_description():
             DeclareLaunchArgument("event_camera_replay_rate_hz", default_value="50.0"),
             DeclareLaunchArgument("event_camera_window_us", default_value="20000"),
             DeclareLaunchArgument(
+                "enable_event_feature_processing",
+                default_value="false",
+                description="Extract event-image features and adjacent-packet repeatability evidence",
+            ),
+            DeclareLaunchArgument("event_feature_match_distance_px", default_value="12.0"),
+            DeclareLaunchArgument(
                 "enable_mmwave_replay",
                 default_value="false",
                 description="Replay vendor-normalized measured mmWave CSV; observation only",
             ),
             DeclareLaunchArgument("mmwave_input_file", default_value=""),
             DeclareLaunchArgument("mmwave_replay_rate_hz", default_value="20.0"),
+            DeclareLaunchArgument(
+                "enable_mmwave_dynamic_mask",
+                default_value="false",
+                description="Use fresh normalized mmWave detections to mask dynamic LiDAR sectors",
+            ),
+            DeclareLaunchArgument("mmwave_expected_frame_id", default_value="mmwave_link"),
+            DeclareLaunchArgument("mmwave_timeout_sec", default_value="0.25"),
+            DeclareLaunchArgument("mmwave_to_lidar_x", default_value="0.0"),
+            DeclareLaunchArgument("mmwave_to_lidar_y", default_value="0.0"),
+            DeclareLaunchArgument("mmwave_to_lidar_yaw", default_value="0.0"),
+            DeclareLaunchArgument("mmwave_min_abs_velocity", default_value="0.15"),
+            DeclareLaunchArgument("mmwave_min_snr", default_value="5.0"),
+            DeclareLaunchArgument("mmwave_min_confidence", default_value="0.5"),
+            DeclareLaunchArgument("mmwave_angular_half_width", default_value="0.08"),
+            DeclareLaunchArgument("mmwave_radial_margin", default_value="0.35"),
             DeclareLaunchArgument(
                 "enable_relative_height",
                 default_value="false",
@@ -377,6 +451,7 @@ def generate_launch_description():
             gnss,
             uwb_replay,
             event_camera_replay,
+            event_feature,
             mmwave_replay,
             scan_map,
             relocalization,
