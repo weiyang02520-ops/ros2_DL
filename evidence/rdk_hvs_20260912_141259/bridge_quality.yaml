@@ -1,0 +1,76 @@
+header:
+  stamp:
+    sec: 1789193584
+    nanosec: 807841828
+  frame_id: event_camera_optical_frame
+status:
+- level: "\x01"
+  name: dg/event_camera/quality
+  message: DEGRADED
+  hardware_id: apx003cc_hvs
+  values:
+  - key: state
+    value: DEGRADED
+  - key: evs_fresh
+    value: 'true'
+  - key: aps_fresh
+    value: 'false'
+  - key: pair_valid
+    value: 'false'
+  - key: pair_skew_ms
+    value: nan
+  - key: pair_tolerance_ms
+    value: '33.340000'
+  - key: event_rate_per_sec
+    value: '124981.500778'
+  - key: event_packets_per_sec
+    value: '30.000360'
+  - key: aps_rate_per_sec
+    value: '0.000000'
+  - key: static_event_rate_threshold
+    value: '500.000000'
+  - key: evs_packets
+    value: '3446'
+  - key: decoded_events
+    value: '14356036'
+  - key: published_events
+    value: '7178018'
+  - key: aps_frames
+    value: '0'
+  - key: aps_packets
+    value: '0'
+  - key: aps_width
+    value: '0'
+  - key: aps_height
+    value: '0'
+  - key: aps_format
+    value: UNKNOWN
+  - key: aps_bytes
+    value: '0'
+  - key: aps_decode_failures
+    value: '0'
+  - key: get_frame_timeouts
+    value: '0'
+  - key: fused_frames
+    value: '0'
+  - key: skipped_fused_frames
+    value: '0'
+  - key: dropped_event_messages
+    value: '1723'
+  - key: rate_limited_packets
+    value: '3446'
+  - key: features_enabled
+    value: 'true'
+  - key: feature_count
+    value: '223'
+  - key: unsupported_aps_frames
+    value: '0'
+  - key: recording_enabled
+    value: 'false'
+  - key: afk_filter_enabled
+    value: 'false'
+  - key: clock_basis
+    value: ros_receipt_time_with_sensor_pair_diagnostics
+  - key: publishes_cmd_vel
+    value: 'false'
+---

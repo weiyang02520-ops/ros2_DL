@@ -12,7 +12,10 @@ cmake -S src/dg_hvs_bridge -B build/dg_hvs_bridge \
   -DHV_TOOLKIT_ROOT="$HV_TOOLKIT_ROOT"
 cmake --build build/dg_hvs_bridge -j2
 cmake --install build/dg_hvs_bridge --prefix "$HOME/dg202611_hvs_ws/install"
-source "$HOME/dg202611_hvs_ws/install/setup.bash"
+
+# 标准 CMake 安装不会自动生成工作区 setup.bash；运行时显式加入安装前缀和 Toolkit 库
+export AMENT_PREFIX_PATH="$HOME/dg202611_hvs_ws/install:${AMENT_PREFIX_PATH:-}"
+export LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRARY_PATH:-}"
 ```
 
 有完整 ROS 2 工作区时也可以用 `colcon build --packages-select dg_hvs_bridge --cmake-args -DHV_TOOLKIT_ROOT=$HV_TOOLKIT_ROOT`；两种方式得到的是同一个桥接目标。
@@ -27,3 +30,8 @@ source "$HOME/dg202611_hvs_ws/install/setup.bash"
 ## features 话题
 
 参数文件默认启用桥接内置的 `/dg/event_camera/features` 发布器。它使用与现有 `event_feature_node` 相同的 PointCloud2 字段：`pixel_x`、`pixel_y`、`event_count`、`positive_fraction`。如果仍运行 `run_rdk_event_feature_sidecar.sh`，请把桥接参数 `publish_features` 设为 `false`，避免两个节点同时发布同一 features 话题；需要相邻包重复率时使用 sidecar 的 `feature_quality` 诊断。
+
+
+## 当前 RDK 实测边界（2026-09-12）
+
+厂商底层 `dual_vc_vin -c 1 -d 0` 已在 RDK 上持续输出 EVS 约 208.5–209.0 FPS、APS 约 29.79–29.85 FPS。当前预编译 Toolkit `Backend::MipiHvs` 桥接仍出现 `APS ISP getframe failed`，质量状态为 `DEGRADED`，因此在 APS ROS 输出通过前不得标记 ROS 双流通过，也不得开始机器人端跨板融合。
