@@ -36,6 +36,14 @@ def generate_launch_description():
     enable_uwb_replay = LaunchConfiguration("enable_uwb_replay")
     enable_event_camera_replay = LaunchConfiguration("enable_event_camera_replay")
     enable_event_feature_processing = LaunchConfiguration("enable_event_feature_processing")
+    enable_hybrid_vision_assist = LaunchConfiguration("enable_hybrid_vision_assist")
+    event_camera_intrinsics_valid = LaunchConfiguration("event_camera_intrinsics_valid")
+    event_camera_lidar_extrinsics_valid = LaunchConfiguration(
+        "event_camera_lidar_extrinsics_valid"
+    )
+    event_camera_motion_compensation_ready = LaunchConfiguration(
+        "event_camera_motion_compensation_ready"
+    )
     enable_mmwave_replay = LaunchConfiguration("enable_mmwave_replay")
     enable_mmwave_dynamic_mask = LaunchConfiguration("enable_mmwave_dynamic_mask")
     enable_relative_height = LaunchConfiguration("enable_relative_height")
@@ -102,6 +110,10 @@ def generate_launch_description():
                 "filtered_scan_topic": "/dg/lidar/filtered_scan",
                 "stable_features_topic": "/dg/lidar/stable_features",
                 "quality_topic": "/dg/lidar/quality",
+                "event_assist_enabled": ParameterValue(
+                    enable_hybrid_vision_assist, value_type=bool
+                ),
+                "event_assist_quality_topic": "/dg/event_camera/assist_quality",
                 "mmwave_dynamic_mask_enabled": ParameterValue(
                     enable_mmwave_dynamic_mask, value_type=bool
                 ),
@@ -189,6 +201,30 @@ def generate_launch_description():
                 "expected_frame_id": "event_camera_optical_frame",
                 "match_distance_px": ParameterValue(
                     event_feature_match_distance_px, value_type=float
+                ),
+            }
+        ],
+    )
+    hybrid_vision_assist = Node(
+        package="ylhb_base",
+        executable="hybrid_vision_assist_node",
+        name="dg_hybrid_vision_assist_node",
+        output="screen",
+        condition=IfCondition(enable_hybrid_vision_assist),
+        parameters=[
+            {
+                "camera_quality_topic": "/dg/event_camera/quality",
+                "event_features_topic": "/dg/event_camera/features",
+                "motion_mask_topic": "/dg/event_camera/motion_mask",
+                "camera_info_topic": "/dg/event_camera/camera_info",
+                "odom_topic": "/odom",
+                "imu_topic": "/imu/data",
+                "assist_quality_topic": "/dg/event_camera/assist_quality",
+                "lidar_extrinsics_valid": ParameterValue(
+                    event_camera_lidar_extrinsics_valid, value_type=bool
+                ),
+                "motion_compensation_ready": ParameterValue(
+                    event_camera_motion_compensation_ready, value_type=bool
                 ),
             }
         ],
@@ -366,6 +402,22 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("event_feature_match_distance_px", default_value="12.0"),
             DeclareLaunchArgument(
+                "enable_hybrid_vision_assist",
+                default_value="false",
+                description="Feed live HVS diagnostics to MODEL-2 without bypassing calibration gates",
+            ),
+            DeclareLaunchArgument(
+                "event_camera_intrinsics_valid",
+                default_value="false",
+                description="Reserved evidence flag; CameraInfo values remain the source of truth",
+            ),
+            DeclareLaunchArgument(
+                "event_camera_lidar_extrinsics_valid", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "event_camera_motion_compensation_ready", default_value="false"
+            ),
+            DeclareLaunchArgument(
                 "enable_mmwave_replay",
                 default_value="false",
                 description="Replay vendor-normalized measured mmWave CSV; observation only",
@@ -452,6 +504,7 @@ def generate_launch_description():
             uwb_replay,
             event_camera_replay,
             event_feature,
+            hybrid_vision_assist,
             mmwave_replay,
             scan_map,
             relocalization,

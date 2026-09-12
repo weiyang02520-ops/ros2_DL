@@ -108,6 +108,11 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("mmwave_min_confidence", 0.5)
             self.declare_parameter("mmwave_angular_half_width", 0.08)
             self.declare_parameter("mmwave_radial_margin", 0.35)
+            self.declare_parameter("event_assist_enabled", False)
+            self.declare_parameter(
+                "event_assist_quality_topic", "/dg/event_camera/assist_quality"
+            )
+            self.declare_parameter("event_assist_timeout_sec", 0.5)
 
             config = _config_from_node(self)
             self._config = config
@@ -140,6 +145,23 @@ def create_node(node_name: str) -> Any:
             self._mmwave_input_count = 0
             self._mmwave_reject_reason = "DISABLED" if not self._mmwave_enabled else "NO_MESSAGE"
             self._mmwave_frame_id = ""
+            self._event_assist_enabled = bool(
+                self.get_parameter("event_assist_enabled").value
+            )
+            self._event_assist_timeout_sec = float(
+                self.get_parameter("event_assist_timeout_sec").value
+            )
+            if (
+                not math.isfinite(self._event_assist_timeout_sec)
+                or self._event_assist_timeout_sec <= 0.0
+            ):
+                raise ValueError("event assist timeout must be finite and positive")
+            self._event_assist_received_at: float | None = None
+            self._event_assist_state = (
+                "NO_MESSAGE" if self._event_assist_enabled else "DISABLED"
+            )
+            self._event_assist_declares_consumed = False
+            self._event_assist_may_modify_lidar = False
             scan_topic = str(self.get_parameter("scan_topic").value)
             odom_topic = str(self.get_parameter("odom_topic").value)
             self._filtered_pub = self.create_publisher(LaserScan, str(self.get_parameter("filtered_scan_topic").value), 10)
@@ -154,6 +176,17 @@ def create_node(node_name: str) -> Any:
                     f"mmWave dynamic mask enabled on {mmwave_topic}; expected frame "
                     f"{self._mmwave_expected_frame_id}"
                 )
+            if self._event_assist_enabled:
+                event_assist_topic = str(
+                    self.get_parameter("event_assist_quality_topic").value
+                )
+                self.create_subscription(
+                    DiagnosticArray, event_assist_topic, self._on_event_assist, 10
+                )
+                self.get_logger().info(
+                    f"event-camera assist diagnostics enabled on {event_assist_topic}; "
+                    "scan modification remains calibration-gated"
+                )
             self.get_logger().info(
                 f"side-channel LiDAR robustness POC active: {scan_topic} + {odom_topic}; "
                 "existing scan consumers are not replaced"
@@ -161,6 +194,26 @@ def create_node(node_name: str) -> Any:
 
         def _on_odom(self, message: Any) -> None:
             self._latest_odom_pose = _odom_pose(message)
+
+        def _on_event_assist(self, message: Any) -> None:
+            if not message.status:
+                self._event_assist_state = "EMPTY_DIAGNOSTIC"
+                self._event_assist_received_at = None
+                return
+            values = {
+                str(item.key): str(item.value).strip().lower()
+                for item in message.status[0].values
+            }
+            self._event_assist_state = values.get(
+                "state", str(message.status[0].message)
+            )
+            self._event_assist_declares_consumed = (
+                values.get("model2_consumes_event_assist", "false") == "true"
+            )
+            self._event_assist_may_modify_lidar = (
+                values.get("may_modify_lidar", "false") == "true"
+            )
+            self._event_assist_received_at = time.monotonic()
 
         def _on_mmwave(self, message: Any) -> None:
             self._mmwave_frame_id = str(message.header.frame_id)
@@ -225,6 +278,12 @@ def create_node(node_name: str) -> Any:
                 and self._mmwave_received_at is not None
                 and time.monotonic() - self._mmwave_received_at <= self._mmwave_timeout_sec
             )
+            event_assist_fresh = (
+                self._event_assist_enabled
+                and self._event_assist_received_at is not None
+                and time.monotonic() - self._event_assist_received_at
+                <= self._event_assist_timeout_sec
+            )
             external_dynamic_sectors = self._latest_dynamic_sectors if mmwave_fresh else ()
             try:
                 result = process_scan(
@@ -251,6 +310,16 @@ def create_node(node_name: str) -> Any:
                         if mmwave_fresh or self._mmwave_reject_reason != "ACCEPTED"
                         else "STALE"
                     ),
+                    "event_assist_enabled": self._event_assist_enabled,
+                    "event_assist_data_fresh": event_assist_fresh,
+                    "event_assist_state": self._event_assist_state,
+                    "event_assist_consumed_by_model2": (
+                        event_assist_fresh and self._event_assist_declares_consumed
+                    ),
+                    "event_assist_permission_to_modify_lidar": (
+                        event_assist_fresh and self._event_assist_may_modify_lidar
+                    ),
+                    "event_assist_applied_to_scan": False,
                 }
             )
             self._publish_quality(message, quality)

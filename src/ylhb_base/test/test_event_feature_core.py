@@ -15,6 +15,11 @@ from event_feature_core import (  # noqa: E402
     extract_event_features,
     feature_repeatability,
 )
+from hybrid_vision_assist_core import (  # noqa: E402
+    HybridVisionAssistConfig,
+    HybridVisionObservation,
+    evaluate_hybrid_vision_assist,
+)
 
 
 def observation(x: int, y: int, polarity: int = 1, offset: int = 0) -> EventObservation:
@@ -72,3 +77,52 @@ def test_invalid_event_is_rejected() -> None:
     config = EventFeatureConfig(width=32, height=32)
     with pytest.raises(ValueError, match="outside"):
         extract_event_features([observation(40, 1)], config)
+
+
+def assist_observation(**overrides: object) -> HybridVisionObservation:
+    values: dict[str, object] = {
+        "now_sec": 10.0,
+        "camera_quality_received_sec": 9.9,
+        "features_received_sec": 9.9,
+        "mask_received_sec": 9.9,
+        "camera_state": "GOOD",
+        "event_feature_count": 12,
+        "motion_mask_active_fraction": 0.1,
+        "camera_intrinsics_valid": True,
+        "lidar_extrinsics_valid": True,
+        "motion_compensation_ready": True,
+        "robot_linear_speed": 0.0,
+        "robot_yaw_rate": 0.0,
+    }
+    values.update(overrides)
+    return HybridVisionObservation(**values)  # type: ignore[arg-type]
+
+
+def test_hybrid_assist_honors_calibration_static_idle_and_fault_boundaries() -> None:
+    config = HybridVisionAssistConfig(input_timeout_sec=0.5)
+
+    uncalibrated = evaluate_hybrid_vision_assist(
+        assist_observation(lidar_extrinsics_valid=False), config
+    )
+    assert uncalibrated.state == "DIAGNOSTIC_ONLY"
+    assert uncalibrated.reason == "CALIBRATION_REQUIRED"
+    assert not uncalibrated.may_modify_lidar
+
+    static_idle = evaluate_hybrid_vision_assist(
+        assist_observation(camera_state="STATIC_IDLE", motion_mask_active_fraction=0.0),
+        config,
+    )
+    assert static_idle.state == "READY_IDLE"
+    assert static_idle.model2_consumes_event_assist
+    assert not static_idle.may_modify_lidar
+
+    fault = evaluate_hybrid_vision_assist(assist_observation(camera_state="FAULT"), config)
+    assert fault.state == "UNAVAILABLE"
+    assert not fault.model2_consumes_event_assist
+    assert not fault.may_modify_lidar
+
+    moving_uncompensated = evaluate_hybrid_vision_assist(
+        assist_observation(robot_yaw_rate=0.5, motion_compensation_ready=False), config
+    )
+    assert moving_uncompensated.reason == "SELF_MOTION_COMPENSATION_REQUIRED"
+    assert not moving_uncompensated.may_modify_lidar

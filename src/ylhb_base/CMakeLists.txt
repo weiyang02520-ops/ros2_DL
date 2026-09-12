@@ -116,6 +116,7 @@ install(PROGRAMS
   scripts/multisource_fusion_core.py
   scripts/auxiliary_sensor_data.py
   scripts/event_feature_core.py
+  scripts/hybrid_vision_assist_core.py
   scripts/pointcloud_reader.py
   scripts/uwb_data_model.py
   scripts/uwb_input.py
@@ -147,6 +148,8 @@ install(PROGRAMS scripts/auxiliary_sensor_replay_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME auxiliary_sensor_replay_node)
 install(PROGRAMS scripts/event_feature_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME event_feature_node)
+install(PROGRAMS scripts/hybrid_vision_assist_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME hybrid_vision_assist_node)
 install(PROGRAMS scripts/invalid_candidate_injector_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME invalid_candidate_injector_node)
 
