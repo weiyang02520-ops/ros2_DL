@@ -32,6 +32,7 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             "auxiliary_sensor_replay_node.py",
             "event_feature_core.py",
             "event_feature_node.py",
+            "auxiliary_transport_monitor_node.py",
         ):
             ast.parse((SCRIPTS / name).read_text(encoding="utf-8"))
 
@@ -163,6 +164,8 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         self.assertIn('default_value="true"', text)
         self.assertIn('executable="multisource_fusion_node"', text)
         self.assertIn('condition=IfCondition(enable_multisource_fusion)', text)
+        self.assertIn('enable_auxiliary_transport_monitor', text)
+        self.assertIn('executable="auxiliary_transport_monitor_node"', text)
         for argument in (
             "gnss_origin_latitude",
             "gnss_origin_longitude",
@@ -247,6 +250,7 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         self.assertIn("test_multisource_fusion_core", text)
         self.assertIn("test_multisource_fusion_protocols", text)
         self.assertIn("test_event_feature_core", text)
+        self.assertIn("auxiliary_transport_monitor_node.py", text)
 
     def test_default_ekf_and_bringup_are_not_wired_to_fusion(self) -> None:
         launch = LAUNCH.read_text(encoding="utf-8")

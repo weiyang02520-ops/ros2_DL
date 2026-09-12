@@ -44,7 +44,9 @@ def generate_launch_description():
     event_camera_motion_compensation_ready = LaunchConfiguration(
         "event_camera_motion_compensation_ready"
     )
+    enable_auxiliary_transport_monitor = LaunchConfiguration("enable_auxiliary_transport_monitor")
     enable_mmwave_replay = LaunchConfiguration("enable_mmwave_replay")
+    enable_mmwave_observation = LaunchConfiguration("enable_mmwave_observation")
     enable_mmwave_dynamic_mask = LaunchConfiguration("enable_mmwave_dynamic_mask")
     enable_relative_height = LaunchConfiguration("enable_relative_height")
     use_sim_time = LaunchConfiguration("use_sim_time")
@@ -229,6 +231,23 @@ def generate_launch_description():
                 "motion_compensation_ready": ParameterValue(
                     event_camera_motion_compensation_ready, value_type=bool
                 ),
+            }
+        ],
+    )
+    auxiliary_transport_monitor = Node(
+        package="ylhb_base",
+        executable="auxiliary_transport_monitor_node",
+        name="dg_auxiliary_transport_monitor_node",
+        output="screen",
+        condition=IfCondition(enable_auxiliary_transport_monitor),
+        parameters=[
+            {
+                "event_quality_topic": "/dg/event_camera/quality",
+                "event_features_topic": "/dg/event_camera/features",
+                "event_mask_topic": "/dg/event_camera/motion_mask",
+                "mmwave_points_topic": "/dg/mmwave/points",
+                "mmwave_quality_topic": "/dg/mmwave/quality",
+                "output_topic": "/dg/auxiliary/transport_quality",
             }
         ],
     )
@@ -421,6 +440,11 @@ def generate_launch_description():
                 "event_camera_motion_compensation_ready", default_value="false"
             ),
             DeclareLaunchArgument(
+                "enable_auxiliary_transport_monitor",
+                default_value="false",
+                description="Record RDK-to-Jetson auxiliary topic receipt without changing robot control",
+            ),
+            DeclareLaunchArgument(
                 "enable_mmwave_replay",
                 default_value="false",
                 description="Replay vendor-normalized measured mmWave CSV; observation only",
@@ -514,6 +538,7 @@ def generate_launch_description():
             event_feature,
             hybrid_vision_assist,
             mmwave_replay,
+            auxiliary_transport_monitor,
             scan_map,
             relocalization,
             health,

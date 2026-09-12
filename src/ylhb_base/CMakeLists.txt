@@ -152,6 +152,8 @@ install(PROGRAMS scripts/hybrid_vision_assist_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME hybrid_vision_assist_node)
 install(PROGRAMS scripts/invalid_candidate_injector_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME invalid_candidate_injector_node)
+install(PROGRAMS scripts/auxiliary_transport_monitor_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME auxiliary_transport_monitor_node)
 
 install(PROGRAMS
   scripts/amcl_swing_relocalization_node.py

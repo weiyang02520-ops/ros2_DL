@@ -55,3 +55,18 @@ ros2 topic info /dg/mmwave/points -v
 ```
 
 完成外参测量和动态场景验证后，才把 `enable_mmwave_dynamic_mask` 改为 `true`；事件相机也只有在内参、外参和运动补偿条件满足后才允许修改激光结果。
+
+
+## 传输证据监视器
+
+在英伟纳端可额外开启只读监视器：
+
+```bash
+ros2 launch ylhb_base dg_navigation_integration.launch.py \
+  enable_hybrid_vision_assist:=true \
+  enable_mmwave_observation:=true \
+  enable_mmwave_dynamic_mask:=false \
+  enable_auxiliary_transport_monitor:=true
+```
+
+监视器发布 `/dg/auxiliary/transport_quality`，用于确认 RDK 的话题已经到达英伟纳，并记录 `GOOD/STALE/UNSEEN`、消息数量、检测数量和 MODEL-2 是否具备观察调用条件。该节点只读传感器话题，不发布 `/cmd_vel`，不修改 `/scan` 或 `/dg/lidar/filtered_scan`。
