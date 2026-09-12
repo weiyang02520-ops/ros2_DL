@@ -97,6 +97,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("line_neighbor_distance", 0.25)
             self.declare_parameter("min_line_points", 3)
             self.declare_parameter("mmwave_dynamic_mask_enabled", False)
+            self.declare_parameter("mmwave_observation_enabled", False)
             self.declare_parameter("mmwave_points_topic", "/dg/mmwave/points")
             self.declare_parameter("mmwave_expected_frame_id", "mmwave_link")
             self.declare_parameter("mmwave_timeout_sec", 0.25)
@@ -121,6 +122,10 @@ def create_node(node_name: str) -> Any:
             self._latest_odom_pose: tuple[float, float, float] | None = None
             self._warned_without_odom = False
             self._mmwave_enabled = bool(self.get_parameter("mmwave_dynamic_mask_enabled").value)
+            self._mmwave_observation_enabled = bool(
+                self.get_parameter("mmwave_observation_enabled").value
+            )
+            self._mmwave_subscribed = self._mmwave_enabled or self._mmwave_observation_enabled
             self._mmwave_timeout_sec = float(self.get_parameter("mmwave_timeout_sec").value)
             self._mmwave_expected_frame_id = str(self.get_parameter("mmwave_expected_frame_id").value)
             self._mmwave_to_lidar = (
@@ -143,7 +148,7 @@ def create_node(node_name: str) -> Any:
             self._latest_dynamic_sectors: tuple[DynamicSector, ...] = ()
             self._mmwave_received_at: float | None = None
             self._mmwave_input_count = 0
-            self._mmwave_reject_reason = "DISABLED" if not self._mmwave_enabled else "NO_MESSAGE"
+            self._mmwave_reject_reason = "DISABLED" if not self._mmwave_subscribed else "NO_MESSAGE"
             self._mmwave_frame_id = ""
             self._event_assist_enabled = bool(
                 self.get_parameter("event_assist_enabled").value
@@ -169,11 +174,12 @@ def create_node(node_name: str) -> Any:
             self._quality_pub = self.create_publisher(DiagnosticArray, str(self.get_parameter("quality_topic").value), 10)
             self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
             self.create_subscription(LaserScan, scan_topic, self._on_scan, qos_profile_sensor_data)
-            if self._mmwave_enabled:
+            if self._mmwave_subscribed:
                 mmwave_topic = str(self.get_parameter("mmwave_points_topic").value)
                 self.create_subscription(PointCloud2, mmwave_topic, self._on_mmwave, qos_profile_sensor_data)
+                mode = "dynamic mask" if self._mmwave_enabled else "observation"
                 self.get_logger().info(
-                    f"mmWave dynamic mask enabled on {mmwave_topic}; expected frame "
+                    f"mmWave {mode} subscribed on {mmwave_topic}; expected frame "
                     f"{self._mmwave_expected_frame_id}"
                 )
             if self._event_assist_enabled:
@@ -274,7 +280,7 @@ def create_node(node_name: str) -> Any:
                 self.get_logger().warning("no two odometry poses yet; temporal compensation is not available")
                 self._warned_without_odom = True
             mmwave_fresh = (
-                self._mmwave_enabled
+                self._mmwave_subscribed
                 and self._mmwave_received_at is not None
                 and time.monotonic() - self._mmwave_received_at <= self._mmwave_timeout_sec
             )
@@ -284,7 +290,9 @@ def create_node(node_name: str) -> Any:
                 and time.monotonic() - self._event_assist_received_at
                 <= self._event_assist_timeout_sec
             )
-            external_dynamic_sectors = self._latest_dynamic_sectors if mmwave_fresh else ()
+            external_dynamic_sectors = (
+                self._latest_dynamic_sectors if self._mmwave_enabled and mmwave_fresh else ()
+            )
             try:
                 result = process_scan(
                     frame,
@@ -302,6 +310,15 @@ def create_node(node_name: str) -> Any:
             quality.update(
                 {
                     "auxiliary_dynamic_mask_enabled": self._mmwave_enabled,
+                    "mmwave_observation_enabled": self._mmwave_observation_enabled,
+                    "mmwave_data_fresh": mmwave_fresh,
+                    "mmwave_data_received": self._mmwave_received_at is not None,
+                    "mmwave_dynamic_sector_count": (
+                        len(self._latest_dynamic_sectors) if mmwave_fresh else 0
+                    ),
+                    "mmwave_dynamic_mask_applied": bool(
+                        self._mmwave_enabled and external_dynamic_sectors
+                    ),
                     "auxiliary_dynamic_data_fresh": mmwave_fresh,
                     "auxiliary_dynamic_input_count": self._mmwave_input_count,
                     "auxiliary_dynamic_frame_id": self._mmwave_frame_id,

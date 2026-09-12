@@ -173,6 +173,7 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             "enable_relative_height",
             "relative_height_odom_topic",
             "enable_mmwave_dynamic_mask",
+            "enable_mmwave_observation",
             "mmwave_expected_frame_id",
             "mmwave_to_lidar_x",
             "mmwave_to_lidar_y",
@@ -203,6 +204,9 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         self.assertIn(marker, launch)
         node = (SCRIPTS / "lidar_robust_node.py").read_text(encoding="utf-8")
         self.assertIn('self.declare_parameter("mmwave_dynamic_mask_enabled", False)', node)
+        self.assertIn('self.declare_parameter("mmwave_observation_enabled", False)', node)
+        self.assertIn('"mmwave_dynamic_mask_applied"', node)
+        self.assertIn('self._mmwave_enabled and external_dynamic_sectors', node)
         self.assertIn('self.declare_parameter("mmwave_points_topic", "/dg/mmwave/points")', node)
         self.assertIn('(\"x\", \"y\", \"radial_velocity\", \"snr_db\", \"confidence\")', node)
         self.assertNotIn('create_publisher(Twist', node)

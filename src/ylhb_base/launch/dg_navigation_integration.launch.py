@@ -117,6 +117,9 @@ def generate_launch_description():
                 "mmwave_dynamic_mask_enabled": ParameterValue(
                     enable_mmwave_dynamic_mask, value_type=bool
                 ),
+                "mmwave_observation_enabled": ParameterValue(
+                    enable_mmwave_observation, value_type=bool
+                ),
                 "mmwave_points_topic": "/dg/mmwave/points",
                 "mmwave_expected_frame_id": mmwave_expected_frame_id,
                 "mmwave_timeout_sec": ParameterValue(mmwave_timeout_sec, value_type=float),
@@ -428,6 +431,11 @@ def generate_launch_description():
                 "enable_mmwave_dynamic_mask",
                 default_value="false",
                 description="Use fresh normalized mmWave detections to mask dynamic LiDAR sectors",
+            ),
+            DeclareLaunchArgument(
+                "enable_mmwave_observation",
+                default_value="false",
+                description="Subscribe to normalized mmWave detections and report receipt without changing LiDAR",
             ),
             DeclareLaunchArgument("mmwave_expected_frame_id", default_value="mmwave_link"),
             DeclareLaunchArgument("mmwave_timeout_sec", default_value="0.25"),
