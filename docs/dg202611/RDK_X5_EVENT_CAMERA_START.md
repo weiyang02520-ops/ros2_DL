@@ -134,6 +134,18 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 
 这一步只能在地瓜派专用任务中按已确认的命令执行，不能轮流试错 CAM0/CAM1，也不能跳过镜像核对。
 
+## 2026-09-12 桥接状态
+
+已在独立集成分支 `codex/dg-robot-integration` 完成 `dg_hvs_bridge` 的第一轮加固，提交为 `a39b086`。本轮包含：
+
+- EVS、APS、融合图、运动掩码、CameraInfo、质量诊断和可选 features 话题；
+- APS 实际格式、尺寸、字节数、取帧超时、解码失败、APS 帧率和事件包率统计；
+- NV12、Gray8、RAW8、BayerRG8、RGB888 以及明确的 unpacked RAW10 解析；
+- 运行库 RPATH 加固；
+- 事件相机辅助 MODEL-2 的安全观察模式，不发布 `/cmd_vel`。
+
+当前证据边界仍是：底层厂商双流示例已能看到 EVS 与 APS；官方 Toolkit ROS 桥接此前只稳定拿到 EVS，APS ISP 路径仍报告失败。因此尚未标记 `HVS_DUAL_STREAM_PASS`，也没有把事件相机写成已经完成机器人实测。下一次板端联调先运行官方 `live_record_display`，再运行 `dg_hvs_bridge`，比较两者的 APS 计数和错误日志。
+
 ## 当前实机证据
 
 地瓜派专用任务已保存以下只读证据：
