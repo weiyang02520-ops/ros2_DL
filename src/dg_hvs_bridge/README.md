@@ -1,5 +1,7 @@
 # dg_hvs_bridge
 
+RDK 运行账号、板端工作区和记录目录通过 `DG_RDK_USER`、`DG_RDK_HOST`、`DG_RDK_WORKSPACE`、`DG_RDK_RECORD_DIR` 环境变量指定；默认账号为 `root`，默认记录目录为 `$HOME/dg202611_rdk_records`。脚本不会保存或读取 SSH 密码。
+
 RDK X5 上的 APX003CC HVS 双流 ROS 2 桥。它只发布相机数据和诊断，不发布运动命令。
 
 构建时必须把 `HV_TOOLKIT_ROOT` 指向官方 `shimetapi_hybrid_vision_toolkit` 根目录。RDK X5 当前没有 `colcon` 时，使用标准 CMake/ament 流程：

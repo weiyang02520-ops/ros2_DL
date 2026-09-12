@@ -64,6 +64,27 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             self.assertEqual(radar_summary["detection_count"], 2)
             self.assertEqual(radar_summary["moving_detection_count"], 1)
 
+    def test_transport_monitor_exposes_auditable_timing_fields(self) -> None:
+        import auxiliary_transport_monitor_node as monitor
+
+        snapshot = monitor._timing_snapshot(
+            {
+                "received_monotonic": 10.0,
+                "received_wall_time": 1_700_000_000.25,
+                "received_ros_time": 20.0,
+                "source_stamp": 19.75,
+            },
+            now_monotonic=10.4,
+            now_ros_time=20.4,
+        )
+        self.assertEqual(snapshot["header_stamp_sec"], 19.75)
+        self.assertEqual(snapshot["received_wall_time_sec"], 1_700_000_000.25)
+        self.assertEqual(snapshot["received_ros_time_sec"], 20.0)
+        self.assertAlmostEqual(snapshot["age_sec"], 0.4)
+        self.assertAlmostEqual(snapshot["header_age_sec"], 0.65)
+        self.assertAlmostEqual(snapshot["header_to_receive_delta_sec"], 0.25)
+        self.assertAlmostEqual(snapshot["estimated_latency_sec"], 0.25)
+
     def test_replay_source_kind_cannot_silently_label_fixture_as_measured(self) -> None:
         text = (SCRIPTS / "auxiliary_sensor_replay_node.py").read_text(encoding="utf-8")
         self.assertIn('self.declare_parameter("source_kind", "MEASURED_REPLAY")', text)

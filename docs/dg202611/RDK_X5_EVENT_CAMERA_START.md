@@ -1,5 +1,25 @@
 # RDK X5 事件相机启动与接入
 
+## RDK 账号与路径约定（2026-09-12）
+
+当前地瓜派使用 `root` 账号；IP 可能随热点变化。脚本不把账号、板端工作区或记录目录写死，统一支持以下环境变量（也兼容不带 `DG_` 前缀的别名）：
+
+```bash
+export DG_RDK_USER=root
+export DG_RDK_HOST=192.168.43.13
+export DG_RDK_WORKSPACE=/root/dg202611_rdk
+export DG_RDK_RECORD_DIR=/root/dg202611_rdk_records
+export DG_RDK_TROS_SETUP=/opt/tros/humble/setup.bash
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+```
+
+`DG_RDK_WORKSPACE`用于记录板端工作区位置，`DG_RDK_RECORD_DIR`用于保存探测、采集和校验文件；目录不存在时由采集脚本创建。密码不写入脚本、日志或证据。需要从电脑连接时使用：
+
+```bash
+ssh "${DG_RDK_USER}@${DG_RDK_HOST}"
+```
+
 ## 当前结论（2026-09-11）
 
 事件相机的软件接入路线可以继续，当前状态是：
@@ -94,7 +114,9 @@ APX003CC + 厂商采集程序（RDK X5）
 进入侧车包解压目录后运行：
 
 ```bash
-bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
+bash probe_rdk_x5_event_camera.sh
+# 或者显式指定输出文件：
+# bash probe_rdk_x5_event_camera.sh "$DG_RDK_RECORD_DIR/evs_probe_$(date +%Y%m%d_%H%M%S).txt"
 ```
 
 脚本会自动尝试加载 `/opt/tros/humble/setup.bash`，并记录：
@@ -109,7 +131,7 @@ bash probe_rdk_x5_event_camera.sh ~/evs_probe_$(date +%Y%m%d_%H%M%S).txt
 
 ## 第二步：先确认镜像和登录环境
 
-时佩适配页给出的登录方式是：串口 115200，用户 `sunrise`；SSH 使用 `sunrise@<板端 IP>`。板端当前应先记录系统版本、适配镜像标识和启动分区文件，核对是否属于时佩适配镜像。官方固件说明明确要求 RDK X5 使用适配固件后才验证 APX003CC 识别和双流采集，因此不能跳过这一核对直接改 overlay。
+时佩资料中的示例账号可能是 `sunrise`；本次板端实际使用 `root`，SSH 目标由 `DG_RDK_USER` 与 `DG_RDK_HOST` 组成。板端当前应先记录系统版本、适配镜像标识和启动分区文件，核对是否属于时佩适配镜像。官方固件说明明确要求 RDK X5 使用适配固件后才验证 APX003CC 识别和双流采集，因此不能跳过这一核对直接改 overlay。
 
 ## 第三步：确认 CAM1 与 overlay 映射
 
@@ -187,6 +209,7 @@ file evs_live_player.RAW8
 
 ```bash
 bash run_rdk_event_csv_replay.sh /data/events.csv 50.0 false
+# 运行前可通过 DG_RDK_WORKSPACE / DG_RDK_RECORD_DIR 指定板端路径
 ```
 
 回放会标记为 `source_kind=MEASURED_REPLAY`。实时 wrapper 准备好后再运行：

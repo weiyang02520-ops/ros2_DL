@@ -36,6 +36,53 @@ def _stamp_to_seconds(stamp: Any) -> float | None:
     return value if math.isfinite(value) and value > 0.0 else None
 
 
+def _timing_snapshot(
+    stream: dict[str, Any],
+    *,
+    now_monotonic: float,
+    now_ros_time: float | None,
+) -> dict[str, float | None]:
+    """Return auditable timing values for one received ROS message.
+
+    ``age_sec`` uses the local monotonic clock and is therefore the stable
+    freshness value even when a publisher uses a different ROS clock.  The
+    header delta is best-effort: it is meaningful only when source and
+    receiver ROS clocks share a time domain.
+    """
+    received_monotonic = stream.get("received_monotonic")
+    age_sec = None
+    if received_monotonic is not None:
+        age_sec = max(0.0, float(now_monotonic) - float(received_monotonic))
+
+    source_stamp = stream.get("source_stamp")
+    received_ros_time = stream.get("received_ros_time")
+    header_delta = None
+    if source_stamp is not None and received_ros_time is not None:
+        candidate = float(received_ros_time) - float(source_stamp)
+        if math.isfinite(candidate):
+            header_delta = candidate
+
+    estimated_latency = None
+    if header_delta is not None and header_delta >= 0.0:
+        estimated_latency = header_delta
+
+    header_age = None
+    if source_stamp is not None and now_ros_time is not None:
+        candidate = float(now_ros_time) - float(source_stamp)
+        if math.isfinite(candidate) and candidate >= 0.0:
+            header_age = candidate
+
+    return {
+        "header_stamp_sec": source_stamp,
+        "received_wall_time_sec": stream.get("received_wall_time"),
+        "received_ros_time_sec": received_ros_time,
+        "age_sec": age_sec,
+        "header_age_sec": header_age,
+        "header_to_receive_delta_sec": header_delta,
+        "estimated_latency_sec": estimated_latency,
+    }
+
+
 def create_node(node_name: str) -> Any:
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from rclpy.node import Node
@@ -107,6 +154,8 @@ def create_node(node_name: str) -> Any:
         def _new_stream() -> dict[str, Any]:
             return {
                 "received_monotonic": None,
+                "received_wall_time": None,
+                "received_ros_time": None,
                 "count": 0,
                 "frame_id": "",
                 "source_stamp": None,
@@ -116,6 +165,11 @@ def create_node(node_name: str) -> Any:
         def _on_data(self, name: str, message: Any) -> None:
             stream = self._streams[name]
             stream["received_monotonic"] = time.monotonic()
+            stream["received_wall_time"] = time.time()
+            try:
+                stream["received_ros_time"] = float(self.get_clock().now().nanoseconds) * 1e-9
+            except (AttributeError, TypeError, ValueError):
+                stream["received_ros_time"] = None
             stream["count"] += 1
             stream["frame_id"] = str(getattr(getattr(message, "header", None), "frame_id", ""))
             stream["source_stamp"] = _stamp_to_seconds(
@@ -174,7 +228,12 @@ def create_node(node_name: str) -> Any:
             mmwave_observable = mmwave_state in {"GOOD", "STATIC_IDLE", "READY"}
 
             message = DiagnosticArray()
-            message.header.stamp = self.get_clock().now().to_msg()
+            publish_time = self.get_clock().now()
+            message.header.stamp = publish_time.to_msg()
+            try:
+                publish_ros_time = float(publish_time.nanoseconds) * 1e-9
+            except (AttributeError, TypeError, ValueError):
+                publish_ros_time = None
             status = DiagnosticStatus()
             status.name = "dg/auxiliary/transport_quality"
             status.hardware_id = "rdk_to_jetson_dds"
@@ -203,6 +262,22 @@ def create_node(node_name: str) -> Any:
                 "changes_lidar_scan": False,
                 "stale_timeout_sec": self._stale_timeout,
             }
+            stream_prefixes = {
+                "event_quality": "event_camera_quality",
+                "event_features": "event_camera_features",
+                "event_mask": "event_camera_mask",
+                "mmwave_points": "mmwave_points",
+                "mmwave_quality": "mmwave_quality",
+            }
+            for stream_name, prefix in stream_prefixes.items():
+                timing = _timing_snapshot(
+                    self._streams[stream_name],
+                    now_monotonic=now,
+                    now_ros_time=publish_ros_time,
+                )
+                values.update(
+                    {f"{prefix}_{key}": value for key, value in timing.items()}
+                )
             status.values = [
                 KeyValue(key=str(key), value=str(value))
                 for key, value in sorted(values.items())

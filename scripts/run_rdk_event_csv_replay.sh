@@ -3,7 +3,10 @@
 set -euo pipefail
 
 sidecar_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-tros_setup="${TROS_SETUP:-/opt/tros/humble/setup.bash}"
+# Load board-specific paths without embedding a login or home directory.
+# shellcheck source=rdk_env.sh
+[ -f "$sidecar_root/rdk_env.sh" ] && source "$sidecar_root/rdk_env.sh"
+tros_setup="${DG_RDK_TROS_SETUP:-/opt/tros/humble/setup.bash}"
 input_file="${1:-}"
 rate_hz="${2:-50.0}"
 loop="${3:-false}"
@@ -29,6 +32,10 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 echo "RDK_EVENT_MEASURED_REPLAY_START=1"
 echo "INPUT_FILE=$(readlink -f "$input_file")"
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+echo "RDK_USER=$DG_RDK_USER"
+echo "RDK_HOST=$DG_RDK_HOST"
+echo "RDK_WORKSPACE=$DG_RDK_WORKSPACE"
+echo "RDK_RECORD_DIR=$DG_RDK_RECORD_DIR"
 echo "PUBLISHES_MOTION_COMMANDS=false"
 
 exec python3 "$sidecar_root/auxiliary_sensor_replay_node.py" \

@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -60,6 +61,15 @@ void append_scalar(std::vector<uint8_t> & data, size_t offset, const T & value)
 std::string bool_text(bool value)
 {
   return value ? "true" : "false";
+}
+
+std::string default_record_directory()
+{
+  const char * home = std::getenv("HOME");
+  if (home != nullptr && *home != '\0') {
+    return (fs::path(home) / "dg202611_rdk_records").string();
+  }
+  return "dg202611_rdk_records";
 }
 
 std::string pixel_format_text(Shimeta::PixelFormat format)
@@ -126,7 +136,7 @@ public:
     declare_parameter<int>("feature_max_features", 512);
     declare_parameter<bool>("afk_filter_enabled", false);
     declare_parameter<bool>("recording_enabled", false);
-    declare_parameter<std::string>("record_directory", "/home/sunrise/dg_hvs_records");
+    declare_parameter<std::string>("record_directory", default_record_directory());
     declare_parameter<bool>("record_csv_enabled", true);
     declare_parameter<int>("record_aps_every_n", 3);
     declare_parameter<double>("camera_fx", 0.0);
@@ -282,6 +292,9 @@ private:
     afk_filter_enabled_ = get_parameter("afk_filter_enabled").as_bool();
     recording_enabled_ = get_parameter("recording_enabled").as_bool();
     record_directory_ = get_parameter("record_directory").as_string();
+    if (record_directory_.empty()) {
+      record_directory_ = default_record_directory();
+    }
     record_csv_enabled_ = get_parameter("record_csv_enabled").as_bool();
     record_aps_every_n_ = get_parameter("record_aps_every_n").as_int();
     camera_fx_ = get_parameter("camera_fx").as_double();

@@ -3,7 +3,10 @@
 set -euo pipefail
 
 sidecar_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-tros_setup="${TROS_SETUP:-/opt/tros/humble/setup.bash}"
+# Load board-specific paths without embedding a login or home directory.
+# shellcheck source=rdk_env.sh
+[ -f "$sidecar_root/rdk_env.sh" ] && source "$sidecar_root/rdk_env.sh"
+tros_setup="${DG_RDK_TROS_SETUP:-/opt/tros/humble/setup.bash}"
 ros_domain_id="${ROS_DOMAIN_ID:-0}"
 events_topic="${DG_EVENT_TOPIC:-/dg/event_camera/events}"
 features_topic="${DG_EVENT_FEATURES_TOPIC:-/dg/event_camera/features}"
@@ -36,6 +39,9 @@ fi
 
 echo "RDK_EVENT_SIDECAR_START=1"
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+echo "RDK_USER=$DG_RDK_USER"
+echo "RDK_HOST=$DG_RDK_HOST"
+echo "RDK_WORKSPACE=$DG_RDK_WORKSPACE"
 echo "EVENTS_TOPIC=$events_topic"
 echo "FEATURES_TOPIC=$features_topic"
 echo "QUALITY_TOPIC=$quality_topic"

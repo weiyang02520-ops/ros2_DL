@@ -30,7 +30,8 @@ dg_hvs_bridge_node:
     feature_max_features: 512
     afk_filter_enabled: false
     recording_enabled: false
-    record_directory: /home/sunrise/dg_hvs_records
+    # Empty means use $HOME/dg202611_rdk_records in the bridge process.
+    record_directory: ""
     record_csv_enabled: true
     record_aps_every_n: 3
     camera_fx: 0.0

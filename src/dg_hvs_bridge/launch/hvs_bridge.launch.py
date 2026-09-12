@@ -22,7 +22,7 @@ def generate_launch_description():
             DeclareLaunchArgument("params_file", default_value=default_params),
             DeclareLaunchArgument("recording_enabled", default_value="false"),
             DeclareLaunchArgument(
-                "record_directory", default_value="/home/sunrise/dg_hvs_records"
+                "record_directory", default_value=""
             ),
             Node(
                 package="dg_hvs_bridge",

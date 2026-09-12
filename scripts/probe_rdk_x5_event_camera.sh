@@ -4,7 +4,12 @@
 # restart the board, or publish ROS messages.
 set -u
 
-output="${1:-rdk_x5_event_camera_probe_$(date +%Y%m%d_%H%M%S).txt}"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Load board-specific paths without embedding a login or home directory.
+# shellcheck source=rdk_env.sh
+[ -f "$script_root/rdk_env.sh" ] && source "$script_root/rdk_env.sh"
+
+output="${1:-${DG_RDK_RECORD_DIR}/rdk_x5_event_camera_probe_$(date +%Y%m%d_%H%M%S).txt}"
 mkdir -p "$(dirname "$output")" 2>/dev/null || true
 
 run() {
@@ -18,6 +23,10 @@ run() {
   echo "DG-202611 RDK X5 event-camera read-only probe"
   echo "probe_started=$(date --iso-8601=seconds 2>/dev/null || date)"
   echo "probe_host=$(hostname 2>/dev/null || true)"
+  echo "rdk_user=${DG_RDK_USER}"
+  echo "rdk_host=${DG_RDK_HOST}"
+  echo "rdk_workspace=${DG_RDK_WORKSPACE}"
+  echo "rdk_record_dir=${DG_RDK_RECORD_DIR}"
 
   run "kernel" uname -a
   run "os_release" cat /etc/os-release

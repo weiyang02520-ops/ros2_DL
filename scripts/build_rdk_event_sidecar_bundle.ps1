@@ -39,6 +39,7 @@ $files = @(
     @{ Source = "scripts\run_rdk_event_feature_sidecar.sh"; Target = "run_rdk_event_feature_sidecar.sh" },
     @{ Source = "scripts\run_rdk_event_csv_replay.sh"; Target = "run_rdk_event_csv_replay.sh" },
     @{ Source = "scripts\probe_rdk_x5_event_camera.sh"; Target = "probe_rdk_x5_event_camera.sh" },
+    @{ Source = "scripts\rdk_env.sh"; Target = "rdk_env.sh" },
     @{ Source = "docs\dg202611\RDK_X5_EVENT_CAMERA_START.md"; Target = "README.md" }
 )
 foreach ($item in $files) {
