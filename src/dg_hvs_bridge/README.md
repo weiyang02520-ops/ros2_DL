@@ -32,6 +32,8 @@ export LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRAR
 参数文件默认启用桥接内置的 `/dg/event_camera/features` 发布器。它使用与现有 `event_feature_node` 相同的 PointCloud2 字段：`pixel_x`、`pixel_y`、`event_count`、`positive_fraction`。如果仍运行 `run_rdk_event_feature_sidecar.sh`，请把桥接参数 `publish_features` 设为 `false`，避免两个节点同时发布同一 features 话题；需要相邻包重复率时使用 sidecar 的 `feature_quality` 诊断。
 
 
-## 当前 RDK 实测边界（2026-09-12）
+## 当前 RDK 实测状态（2026-09-12）
 
-厂商底层 `dual_vc_vin -c 1 -d 0` 已在 RDK 上持续输出 EVS 约 208.5–209.0 FPS、APS 约 29.79–29.85 FPS。当前预编译 Toolkit `Backend::MipiHvs` 桥接仍出现 `APS ISP getframe failed`，质量状态为 `DEGRADED`，因此在 APS ROS 输出通过前不得标记 ROS 双流通过，也不得开始机器人端跨板融合。
+厂商底层 `dual_vc_vin -c 1 -d 0` 已在 RDK 上持续输出 EVS 约 208.5–209.0 FPS、APS 约 29.79–29.85 FPS。DG 桥接已切换到官方 HBN 双 VC 采集：EVS 与 APS 独立取帧，APS 实际为 RDK `MEM_PIX_FMT_NV12`（1632×1224，两 plane），质量诊断可达到 `GOOD`，`pair_valid=true`，APS 源约 30 Hz，融合图约 10 Hz，EVS/APS 取帧错误为 0。
+
+旧的 Toolkit `Backend::MipiHvs` APS 失败记录仍作为故障排查证据保留；当前默认 RDK 配置使用 `backend: hbn`。这只证明 RDK 本地 ROS 双流桥通过，尚未证明机器人 Jetson 已跨板消费事件数据。机器人端联调仍需单独完成。

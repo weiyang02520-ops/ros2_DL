@@ -34,52 +34,46 @@ evidence/rdk_hvs_20260912_141259/
 RDK_VENDOR_DUAL_STREAM_PASS
 ```
 
-## 未通过：Toolkit ROS 桥双流
+## 已通过：DG RDK ROS 双流桥
 
-最新 `dg_hvs_bridge` 已在 RDK 上重新编译并安装，使用当前板端参数：
+桥接已经改为直接复用厂家 HBN 双 VC 管线：EVS 与 APS 分别由独立线程取帧，APS 使用 RDK `MEM_PIX_FMT_NV12`，并在 APS 到来时从最近的 EVS 硬件时间戳中选择配对帧。
 
-```yaml
-sensor_index: 52
-i2c_bus: 6
-evs_fps: 240
-```
+板端启动和话题验证结果：
 
-ROS 话题均已创建，EVS 和 features 有持续输出，但质量诊断为：
+- ROS 节点：`/dg_hvs_bridge_node`；
+- EVS 质量：`evs_fresh=true`；
+- APS 质量：`aps_fresh=true`；
+- 配对：`pair_valid=true`，实测 `pair_skew_ms≈0.020 ms`；
+- APS 源频率：约 `30.0 Hz`；
+- APS 格式：`NV12`，`1632×1224`，两 plane，`size0=1997568`、`size1=998784`；
+- 融合图：`fused_frames>0`，约 `10 Hz`；
+- 事件话题：约 `14.9 Hz`，由桥接层限速和消息体积共同决定；
+- EVS/APS 取帧错误：均为 `0`；
+- 节点没有 `/cmd_vel` 发布者或订阅者。
 
-```text
-state=DEGRADED
-evs_fresh=true
-aps_fresh=false
-aps_frames=0
-aps_packets=0
-aps_format=UNKNOWN
-fused_frames=0
-```
+桥接录制模式也已在 RDK 上写出 RAW8、EVT2、CSV、APS PGM 和融合 JPEG。配对阈值设置为 `40.0 ms`：APS 周期约 `33.33 ms`，增加少量调度余量；更大的时间间隔仍会进入 `DEGRADED` 并跳过融合图。
 
-运行日志持续出现：
+说明：RDK 掉线前板端已验证 v7 的双线程 HBN 采集和 GOOD 状态；40.0 ms 是本地已提交的鲁棒性配置，尚未在 RDK 恢复连接后重新跑一段长测，因此下一次上板需补做确认。
 
-```text
-MIPI-HVS: APS ISP getframe failed
-```
-
-将 `sensor_index` 试为 52、53、49 后，APS 仍未恢复；问题不是 ROS 话题、QoS、APS 解码格式或 sensor index 单项配置导致的。当前证据更接近：预编译 ShiMetaPi X5 `MipiHvs` 后端的 APS ISP 路径与本机 RDK 厂商 HBN 双流实现不一致。
-
-因此当前不能标记：
+当前可以记录为：
 
 ```text
 RDK_ROS_HVS_BRIDGE_PASS
 ```
 
-## 当前结论
+## 仍未完成：机器人跨板联调
 
-- APX003CC 硬件、RDK 镜像、MIPI、CSI 和 ISP 底层链路已被厂商程序证明可用；
-- DG 桥接的 EVS、ROS 话题、features、质量诊断和“不发布 `/cmd_vel`”均正常；
-- APS ROS 输出和融合图尚未通过；
-- 机器人 Jetson 端三模型尚未进行跨板事件相机联调。
+以上 PASS 只表示 RDK 相机侧和 RDK 本地 ROS 桥已经通过，不表示机器人 Jetson 三模型已经消费事件相机数据。下一阶段仍需：
 
-## 下一步
+1. RDK 与机器人建立 ROS 2 网络通信；
+2. 在机器人侧只接收 APS 压缩图、事件特征、运动掩码和 quality，默认不传完整 EVS；
+3. 先以诊断观察模式接入 MODEL-2，不修改激光结果；
+4. 完成相机内参、APS/EVS 映射、相机到激光雷达外参和 IMU/轮速运动补偿后，再开启事件辅助判断；
+5. 记录机器人端实际消费证据，再单独判断三模型融合状态。
 
-1. 保留本次底层双流证据；
-2. 继续采用 RDK 厂商 HBN 双 VC 管线做 APS/EVS 采集适配，避免把当前 Toolkit `MipiHvs` APS 失败写成硬件故障；
-3. 新适配先在 RDK 本地发布 APS、EVS、quality 和 features，再进行 RDK→Jetson 网络联调；
-4. 在 APS 真正持续输出前，不启用事件相机对 MODEL-2 激光结果的软融合。
+## 证据和边界
+
+- 当前 HBN 模式的 `sensor_index` 与 I2C 总线由厂家 `hvs_config` 决定；YAML 中的 `sensor_index`、`i2c_bus` 用于请求和诊断，不覆盖厂家配置。
+- 完整事件数据保存在 RDK，本节点不发布 `/cmd_vel`。
+- 在 APS ROS 输出通过之前的旧 Toolkit `Backend::MipiHvs` 失败记录仍保留，但不再代表当前 HBN 桥的状态。
+- 当前相机内参仍为占位值，未完成标定前不能把事件相机写成已经改变 MODEL-2 激光判断。

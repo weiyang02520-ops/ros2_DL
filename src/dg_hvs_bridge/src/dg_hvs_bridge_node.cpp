@@ -21,6 +21,7 @@
 #include <shimetapi/io/event_writer.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -39,6 +40,10 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#ifdef DG_HVS_HAS_HBN_BACKEND
+#include "dg_hvs_hbn_backend.h"
+#endif
 
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
@@ -90,6 +95,9 @@ public:
   : Node("dg_hvs_bridge_node")
   {
     declare_parameter<std::string>("device_node", "");
+    declare_parameter<std::string>("backend", "toolkit");
+    declare_parameter<int>("hbn_config_index", 1);
+    declare_parameter<int>("hbn_settle_value", -1);
     declare_parameter<int>("sensor_index", 0);
     declare_parameter<int>("i2c_bus", 1);
     declare_parameter<int>("evs_fps", 240);
@@ -157,7 +165,53 @@ public:
     quality_timer_ = create_wall_timer(1s, std::bind(&DgHvsBridge::publish_quality, this));
     open_recording();
     start_camera();
-    capture_thread_ = std::thread(&DgHvsBridge::capture_loop, this);
+    try {
+      capture_thread_ = std::thread([this]() noexcept {
+          try {
+            capture_loop();
+          } catch (const std::exception & error) {
+            RCLCPP_ERROR(get_logger(), "EVS capture thread stopped: %s", error.what());
+            running_.store(false);
+          } catch (...) {
+            RCLCPP_ERROR(get_logger(), "EVS capture thread stopped with an unknown error");
+            running_.store(false);
+          }
+        });
+#ifdef DG_HVS_HAS_HBN_BACKEND
+      if (use_hbn_backend_) {
+        aps_capture_thread_ = std::thread([this]() noexcept {
+            try {
+              capture_hbn_aps_loop();
+            } catch (const std::exception & error) {
+              RCLCPP_ERROR(get_logger(), "APS capture thread stopped: %s", error.what());
+              running_.store(false);
+            } catch (...) {
+              RCLCPP_ERROR(get_logger(), "APS capture thread stopped with an unknown error");
+              running_.store(false);
+            }
+          });
+      }
+#endif
+    } catch (...) {
+      running_.store(false);
+      if (capture_thread_.joinable()) {
+        capture_thread_.join();
+      }
+#ifdef DG_HVS_HAS_HBN_BACKEND
+      if (hbn_handle_ != nullptr) {
+        dg_hvs_hbn_close(hbn_handle_);
+        hbn_handle_ = nullptr;
+      } else {
+        camera_.StopStream();
+        camera_.Destroy();
+      }
+#else
+      camera_.StopStream();
+      camera_.Destroy();
+#endif
+      close_recording();
+      throw;
+    }
 
     RCLCPP_INFO(
       get_logger(),
@@ -172,8 +226,23 @@ public:
     if (capture_thread_.joinable()) {
       capture_thread_.join();
     }
+#ifdef DG_HVS_HAS_HBN_BACKEND
+    if (aps_capture_thread_.joinable()) {
+      aps_capture_thread_.join();
+    }
+#endif
+#ifdef DG_HVS_HAS_HBN_BACKEND
+    if (use_hbn_backend_) {
+      dg_hvs_hbn_close(hbn_handle_);
+      hbn_handle_ = nullptr;
+    } else {
+      camera_.StopStream();
+      camera_.Destroy();
+    }
+#else
     camera_.StopStream();
     camera_.Destroy();
+#endif
     close_recording();
   }
 
@@ -181,6 +250,9 @@ private:
   void read_parameters()
   {
     device_node_ = get_parameter("device_node").as_string();
+    backend_ = get_parameter("backend").as_string();
+    hbn_config_index_ = get_parameter("hbn_config_index").as_int();
+    hbn_settle_value_ = get_parameter("hbn_settle_value").as_int();
     sensor_index_ = get_parameter("sensor_index").as_int();
     i2c_bus_ = get_parameter("i2c_bus").as_int();
     evs_fps_ = get_parameter("evs_fps").as_int();
@@ -240,6 +312,12 @@ private:
     {
       throw std::invalid_argument("invalid HVS stream, rate, denoise or recording parameter");
     }
+    if (backend_ != "toolkit" && backend_ != "hbn") {
+      throw std::invalid_argument("backend must be toolkit or hbn");
+    }
+    if (backend_ == "hbn" && hbn_config_index_ < 0) {
+      throw std::invalid_argument("hbn_config_index must be non-negative");
+    }
     if (frame_id_.empty() || camera_name_.empty()) {
       throw std::invalid_argument("frame_id and camera_name must be non-empty");
     }
@@ -251,6 +329,27 @@ private:
 
   void start_camera()
   {
+#ifdef DG_HVS_HAS_HBN_BACKEND
+    if (backend_ == "hbn") {
+      const int result = dg_hvs_hbn_open(
+        &hbn_handle_, hbn_config_index_, sensor_index_, i2c_bus_,
+        hbn_settle_value_, buffer_count_);
+      if (result != 0 || hbn_handle_ == nullptr) {
+        throw std::runtime_error("official RDK HBN backend failed to start");
+      }
+      use_hbn_backend_ = true;
+      RCLCPP_INFO(
+        get_logger(),
+        "Using official RDK HBN dual-VC backend: config_index=%d; requested_sensor_index=%d requested_i2c_bus=%d; actual pair is resolved by vendor config",
+        hbn_config_index_, sensor_index_, i2c_bus_);
+      return;
+    }
+#else
+    if (backend_ == "hbn") {
+      throw std::runtime_error(
+              "hbn backend requested, but the official RDK HVS sample tree was unavailable at build time");
+    }
+#endif
     Shimeta::hv::DeviceConfig config;
     config.backend = Shimeta::hv::Backend::MipiHvs;
     config.device_node = device_node_;
@@ -329,6 +428,12 @@ private:
 
   void capture_loop()
   {
+#ifdef DG_HVS_HAS_HBN_BACKEND
+    if (use_hbn_backend_) {
+      capture_hbn_loop();
+      return;
+    }
+#endif
     const uint8_t * last_evs_pointer = nullptr;
     const uint8_t * last_aps_pointer = nullptr;
     while (running_.load() && rclcpp::ok()) {
@@ -354,7 +459,10 @@ private:
         } else if (!events.empty()) {
           last_evs_sensor_us_.store(static_cast<uint64_t>(std::max<int64_t>(0, events.front().t)));
         }
-        last_evs_steady_ = steady_now;
+        {
+          std::lock_guard<std::mutex> lock(state_mutex_);
+          last_evs_steady_ = steady_now;
+        }
         evs_packet_count_.fetch_add(1);
         decoded_event_count_.fetch_add(events.size());
         interval_event_count_.fetch_add(events.size());
@@ -377,7 +485,10 @@ private:
           last_aps_bytes_ = frame.aps.size;
         }
         if (!gray.empty()) {
-          last_aps_steady_ = steady_now;
+          {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            last_aps_steady_ = steady_now;
+          }
           aps_frame_count_.fetch_add(1);
           if (frame.ts.aps_ts_ns > 0) {
             last_aps_sensor_ns_.store(static_cast<uint64_t>(frame.ts.aps_ts_ns));
@@ -390,6 +501,105 @@ private:
       }
     }
   }
+
+#ifdef DG_HVS_HAS_HBN_BACKEND
+  void capture_hbn_loop()
+  {
+    while (running_.load() && rclcpp::ok()) {
+      dg_hvs_hbn_frame_t raw{};
+      const int result = dg_hvs_hbn_get_evs_frame(hbn_handle_, 100, &raw);
+      if (result != 0) {
+        evs_get_frame_error_count_.fetch_add(1);
+        last_evs_get_frame_error_.store(result);
+        continue;
+      }
+      const auto receipt_time = now();
+      const auto steady_now = std::chrono::steady_clock::now();
+
+      Shimeta::Frame frame;
+      frame.evs.data = raw.evs_data;
+      frame.evs.size = raw.evs_size;
+      frame.ts.evs_ts_ns = static_cast<int64_t>(raw.evs_timestamp_ns);
+
+      last_evs_hbn_sensor_ns_.store(raw.evs_timestamp_ns);
+      {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        last_evs_steady_ = steady_now;
+        if (raw.evs_timestamp_ns > 0) {
+          recent_evs_hbn_timestamps_[recent_evs_hbn_write_index_] = raw.evs_timestamp_ns;
+          recent_evs_hbn_write_index_ =
+            (recent_evs_hbn_write_index_ + 1U) % recent_evs_hbn_timestamps_.size();
+        }
+      }
+
+      std::vector<Shimeta::EventCD> events;
+      decoder_.Decode(frame.evs.data, frame.evs.size, events);
+      denoise_and_limit(events);
+      const auto extracted = Shimeta::codec::extractEvsTimestamp(frame.evs.data, frame.evs.size);
+      if (extracted.valid) {
+        last_evs_sensor_us_.store(extracted.processed_timestamp);
+      } else if (!events.empty()) {
+        last_evs_sensor_us_.store(static_cast<uint64_t>(std::max<int64_t>(0, events.front().t)));
+      }
+      evs_packet_count_.fetch_add(1);
+      decoded_event_count_.fetch_add(events.size());
+      interval_event_count_.fetch_add(events.size());
+      update_event_canvas(events);
+      publish_events_if_due(events, receipt_time, steady_now);
+      record_events(frame, events);
+    }
+  }
+
+  void capture_hbn_aps_loop()
+  {
+    while (running_.load() && rclcpp::ok()) {
+      dg_hvs_hbn_frame_t raw{};
+      const int result = dg_hvs_hbn_get_aps_frame(hbn_handle_, 100, &raw);
+      if (result != 0) {
+        aps_get_frame_error_count_.fetch_add(1);
+        last_aps_get_frame_error_.store(result);
+        continue;
+      }
+      const auto receipt_time = now();
+      const auto steady_now = std::chrono::steady_clock::now();
+
+      Shimeta::Frame frame;
+      frame.aps.data = raw.aps_data;
+      frame.aps.size = raw.aps_size;
+      frame.width = raw.aps_width;
+      frame.height = raw.aps_height;
+      frame.frame_id = static_cast<int>(raw.aps_frame_id);
+      if (raw.aps_format != DG_HVS_HBN_PIXEL_FORMAT_NV12) {
+        unsupported_aps_format_count_.fetch_add(1);
+        continue;
+      }
+      frame.format = Shimeta::PixelFormat::NV12;
+      frame.ts.aps_ts_ns = static_cast<int64_t>(raw.aps_timestamp_ns);
+
+      last_aps_frame_id_ = frame.frame_id;
+      last_aps_ts_ns_ = frame.ts.aps_ts_ns;
+      aps_packet_count_.fetch_add(1);
+      cv::Mat gray = aps_to_gray(frame);
+      {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        last_aps_width_ = raw.aps_width;
+        last_aps_height_ = raw.aps_height;
+        last_aps_format_ = "NV12";
+        last_aps_bytes_ = raw.aps_size;
+      }
+      if (!gray.empty()) {
+        {
+          std::lock_guard<std::mutex> lock(state_mutex_);
+          last_aps_steady_ = steady_now;
+        }
+        aps_frame_count_.fetch_add(1);
+        last_aps_sensor_ns_.store(raw.aps_timestamp_ns);
+        update_hbn_pairing(raw.aps_timestamp_ns);
+        publish_aps_and_preview_if_due(gray, receipt_time, steady_now);
+      }
+    }
+  }
+#endif
 
   void denoise_and_limit(std::vector<Shimeta::EventCD> & events)
   {
@@ -515,6 +725,28 @@ private:
     std::lock_guard<std::mutex> lock(state_mutex_);
     pair_skew_ms_ = skew_ms;
     pair_valid_ = std::isfinite(skew_ms) && skew_ms <= pair_tolerance_ms_;
+  }
+
+  void update_hbn_pairing(uint64_t aps_timestamp_ns)
+  {
+    double best_skew_ms = std::numeric_limits<double>::quiet_NaN();
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (aps_timestamp_ns > 0) {
+      uint64_t best_skew_ns = std::numeric_limits<uint64_t>::max();
+      for (const uint64_t evs_timestamp_ns : recent_evs_hbn_timestamps_) {
+        if (evs_timestamp_ns == 0) {
+          continue;
+        }
+        const uint64_t skew_ns = aps_timestamp_ns > evs_timestamp_ns ?
+          aps_timestamp_ns - evs_timestamp_ns : evs_timestamp_ns - aps_timestamp_ns;
+        best_skew_ns = std::min(best_skew_ns, skew_ns);
+      }
+      if (best_skew_ns != std::numeric_limits<uint64_t>::max()) {
+        best_skew_ms = static_cast<double>(best_skew_ns) / 1e6;
+      }
+    }
+    pair_skew_ms_ = best_skew_ms;
+    pair_valid_ = std::isfinite(best_skew_ms) && best_skew_ms <= pair_tolerance_ms_;
   }
 
   sensor_msgs::msg::PointCloud2 make_feature_cloud(
@@ -801,12 +1033,19 @@ private:
   void publish_quality()
   {
     const auto steady_now = std::chrono::steady_clock::now();
-    const auto event_age = last_evs_steady_ == std::chrono::steady_clock::time_point{} ?
+    std::chrono::steady_clock::time_point last_evs_steady;
+    std::chrono::steady_clock::time_point last_aps_steady;
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      last_evs_steady = last_evs_steady_;
+      last_aps_steady = last_aps_steady_;
+    }
+    const auto event_age = last_evs_steady == std::chrono::steady_clock::time_point{} ?
       std::numeric_limits<double>::infinity() :
-      std::chrono::duration<double>(steady_now - last_evs_steady_).count();
-    const auto aps_age = last_aps_steady_ == std::chrono::steady_clock::time_point{} ?
+      std::chrono::duration<double>(steady_now - last_evs_steady).count();
+    const auto aps_age = last_aps_steady == std::chrono::steady_clock::time_point{} ?
       std::numeric_limits<double>::infinity() :
-      std::chrono::duration<double>(steady_now - last_aps_steady_).count();
+      std::chrono::duration<double>(steady_now - last_aps_steady).count();
     const bool event_fresh = event_age <= stream_timeout_sec_;
     const bool aps_fresh = aps_age <= stream_timeout_sec_;
     const uint64_t interval_events = interval_event_count_.exchange(0);
@@ -886,6 +1125,10 @@ private:
     add("aps_bytes", std::to_string(aps_bytes));
     add("aps_decode_failures", std::to_string(unsupported_aps_format_count_.load()));
     add("get_frame_timeouts", std::to_string(get_frame_timeout_count_.load()));
+    add("evs_get_frame_errors", std::to_string(evs_get_frame_error_count_.load()));
+    add("aps_get_frame_errors", std::to_string(aps_get_frame_error_count_.load()));
+    add("last_evs_get_frame_error", std::to_string(last_evs_get_frame_error_.load()));
+    add("last_aps_get_frame_error", std::to_string(last_aps_get_frame_error_.load()));
     add("fused_frames", std::to_string(fused_frame_count_.load()));
     add("skipped_fused_frames", std::to_string(skipped_fused_frame_count_.load()));
     add("dropped_event_messages", std::to_string(dropped_event_messages_.load()));
@@ -919,6 +1162,9 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr features_pub_;
 
   std::string device_node_;
+  std::string backend_;
+  int hbn_config_index_{};
+  int hbn_settle_value_{};
   int sensor_index_{};
   int i2c_bus_{};
   int evs_fps_{};
@@ -955,6 +1201,11 @@ private:
   double camera_cx_{};
   double camera_cy_{};
   std::string distortion_model_;
+#ifdef DG_HVS_HAS_HBN_BACKEND
+  dg_hvs_hbn_handle_t * hbn_handle_{nullptr};
+  bool use_hbn_backend_{false};
+  std::thread aps_capture_thread_;
+#endif
   std::vector<double> distortion_coefficients_;
 
   std::mutex image_mutex_;
@@ -972,9 +1223,16 @@ private:
   std::chrono::steady_clock::time_point last_preview_publish_{};
 
   std::atomic<uint64_t> last_evs_sensor_us_{0};
+  std::atomic<uint64_t> last_evs_hbn_sensor_ns_{0};
+  std::array<uint64_t, 32> recent_evs_hbn_timestamps_{};
+  size_t recent_evs_hbn_write_index_{0};
   std::atomic<uint64_t> last_aps_sensor_ns_{0};
   std::atomic<uint64_t> aps_packet_count_{0};
   std::atomic<uint64_t> get_frame_timeout_count_{0};
+  std::atomic<uint64_t> evs_get_frame_error_count_{0};
+  std::atomic<uint64_t> aps_get_frame_error_count_{0};
+  std::atomic<int> last_evs_get_frame_error_{0};
+  std::atomic<int> last_aps_get_frame_error_{0};
   std::atomic<uint64_t> aps_frames_at_last_quality_{0};
   std::atomic<uint64_t> evs_packets_at_last_quality_{0};
   std::atomic<uint64_t> evs_packet_count_{0};

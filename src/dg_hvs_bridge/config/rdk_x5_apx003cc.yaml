@@ -12,7 +12,8 @@ dg_hvs_bridge_node:
     aps_width: 768
     aps_height: 608
     aps_expected_fps: 30.0
-    pair_tolerance_ms: 33.34
+    # One APS period is 33.33 ms; 40 ms leaves a small scheduling margin while rejecting larger gaps.
+    pair_tolerance_ms: 40.0
     stream_timeout_sec: 0.50
     static_event_rate_threshold: 500.0
     event_publish_rate_hz: 20.0
@@ -38,3 +39,6 @@ dg_hvs_bridge_node:
     camera_cy: 0.0
     distortion_model: plumb_bob
     distortion_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]
+    backend: hbn
+    hbn_config_index: 1
+    hbn_settle_value: -1
