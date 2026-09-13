@@ -27,7 +27,20 @@ if ($Commit -notmatch '^[0-9a-f]{7,40}$') {
     throw "Invalid commit id: $Commit"
 }
 if (-not $ArchivePath) {
-    $ArchivePath = Join-Path $workspaceRoot "artifacts\dg202611_robot_integration_$Commit.tar.gz"
+    # The current release builder writes dg202611_ws_<commit>.tar.gz at the
+    # workspace root. Keep the older artifacts naming as a compatibility
+    # fallback so a documented default invocation still finds the package.
+    $archiveCandidates = @(
+        (Join-Path $workspaceRoot "dg202611_ws_$Commit.tar.gz"),
+        (Join-Path $workspaceRoot "artifacts\dg202611_robot_integration_$Commit.tar.gz"),
+        (Join-Path $workspaceRoot "artifacts\dg202611_ws_$Commit.tar.gz")
+    )
+    $ArchivePath = $archiveCandidates | Where-Object {
+        Test-Path -LiteralPath $_ -PathType Leaf
+    } | Select-Object -First 1
+    if (-not $ArchivePath) {
+        throw "No release archive found for commit $Commit. Expected one of: $($archiveCandidates -join ', ')"
+    }
 }
 $archive = (Resolve-Path -LiteralPath $ArchivePath).Path
 $installer = Join-Path $PSScriptRoot 'install_release_on_robot.sh'

@@ -28,10 +28,12 @@ set +u
 source "$tros_setup"
 set -u
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+export ROS_LOCALHOST_ONLY=0
 
 echo "RDK_EVENT_MEASURED_REPLAY_START=1"
 echo "INPUT_FILE=$(readlink -f "$input_file")"
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+echo "ROS_LOCALHOST_ONLY=$ROS_LOCALHOST_ONLY"
 echo "RDK_USER=$DG_RDK_USER"
 echo "RDK_HOST=$DG_RDK_HOST"
 echo "RDK_WORKSPACE=$DG_RDK_WORKSPACE"

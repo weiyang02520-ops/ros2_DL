@@ -64,6 +64,24 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             self.assertEqual(radar_summary["detection_count"], 2)
             self.assertEqual(radar_summary["moving_detection_count"], 1)
 
+    def test_hvs_bridge_recording_matches_event_replay_csv_contract(self) -> None:
+        bridge = (
+            ROOT.parents[1]
+            / "src"
+            / "dg_hvs_bridge"
+            / "src"
+            / "dg_hvs_bridge_node.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn('csv_file_ << "x,y,polarity,timestamp\\n";', bridge)
+        self.assertIn(
+            "csv_file_ << event.x << ',' << event.y << ','",
+            bridge,
+        )
+        self.assertIn(
+            "<< (event.polarity ? 1 : 0) << ',' << event.t << '\\n';",
+            bridge,
+        )
+
     def test_transport_monitor_exposes_auditable_timing_fields(self) -> None:
         import auxiliary_transport_monitor_node as monitor
 
@@ -90,6 +108,8 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
         self.assertIn('self.declare_parameter("source_kind", "MEASURED_REPLAY")', text)
         self.assertIn('"SYNTHETIC_CONTRACT_FIXTURE"', text)
         self.assertIn('"source_kind": self._source_kind', text)
+        self.assertIn('quality_state = "GOOD" if has_data else "FAULT"', text)
+        self.assertIn('"data_valid": has_data', text)
 
     def test_runtime_nodes_tolerate_rclpy_external_shutdown(self) -> None:
         for name in (

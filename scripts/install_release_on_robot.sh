@@ -36,7 +36,7 @@ if [ ! -f "${archive_path}" ]; then
   echo "Release archive is missing: ${archive_path}" >&2
   exit 2
 fi
-if [ -e "${release_dir}" ]; then
+if [ -e "${release_dir}" ] || [ -L "${release_dir}" ]; then
   echo "Refusing to overwrite existing release directory: ${release_dir}" >&2
   exit 3
 fi
@@ -53,8 +53,46 @@ if [ "${actual_sha256}" != "${expected_sha256}" ]; then
   exit 4
 fi
 
-mkdir "${release_dir}"
-tar -xzf "${archive_path}" -C "${release_dir}"
+staging_dir="$(mktemp -d "/home/nvidia/.dg202611-release.XXXXXX")"
+cleanup_staging() {
+  rm -rf -- "${staging_dir}"
+}
+trap cleanup_staging EXIT
+
+# Reject archive entries that could escape the staging directory before
+# extraction. The release archive is produced locally, but this check keeps a
+# corrupted or substituted archive from writing outside the release area.
+while IFS= read -r archive_entry; do
+  case "${archive_entry}" in
+    /*|../*|*/../*|..)
+      echo "Refusing unsafe archive entry: ${archive_entry}" >&2
+      exit 5
+      ;;
+  esac
+done < <(tar -tzf "${archive_path}")
+
+tar -xzf "${archive_path}" -C "${staging_dir}"
+
+# Accept both archive layouts used by the local packaging tools:
+#   1. files at archive root (scripts/, src/, ...)
+#   2. one top-level workspace directory containing those files.
+source_root="${staging_dir}"
+if [ ! -f "${source_root}/scripts/run_dg202611_preflight.sh" ]; then
+  mapfile -t top_level_dirs < <(find "${staging_dir}" -mindepth 1 -maxdepth 1 -type d -print)
+  if [ "${#top_level_dirs[@]}" -eq 1 ] \
+    && [ -f "${top_level_dirs[0]}/scripts/run_dg202611_preflight.sh" ]; then
+    source_root="${top_level_dirs[0]}"
+  else
+    echo "Release archive has no recognized workspace root" >&2
+    exit 5
+  fi
+fi
+
+if [ -e "${release_dir}" ] || [ -L "${release_dir}" ]; then
+  echo "Refusing to overwrite existing release directory: ${release_dir}" >&2
+  exit 3
+fi
+
 for required in \
   scripts/run_dg202611_preflight.sh \
   scripts/activate_dg_release.sh \
@@ -64,11 +102,22 @@ for required in \
   scripts/install_dg_models_service.sh \
   scripts/run_real_robot_capture.sh \
   src/ylhb_base/CMakeLists.txt; do
-  if [ ! -f "${release_dir}/${required}" ]; then
-    echo "Release is incomplete; missing ${required}" >&2
+  if [ ! -f "${source_root}/${required}" ]; then
+    echo "Release is incomplete; missing ${source_root}/${required}" >&2
     exit 5
   fi
 done
+
+# Move the verified tree into its final versioned path only after all required
+# files are present. This prevents a failed extraction from leaving a partial
+# release that blocks retries.
+mv -- "${source_root}" "${release_dir}"
+if [ ! -d "${release_dir}" ]; then
+  echo "Unable to install release directory: ${release_dir}" >&2
+  exit 5
+fi
+trap - EXIT
+trap 'rm -rf -- "${staging_dir}"' EXIT
 
 cd "${release_dir}"
 export DG_BASE_WS="${base_ws}"

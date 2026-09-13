@@ -18,9 +18,10 @@ if [ ! -f "${integration_ws}/install/setup.bash" ]; then
   exit 2
 fi
 
-# Make the cross-board default explicit. Keep RMW selectable by the operator.
+# This entry point is for the cross-board graph. Do not allow a stale shell
+# setting to silently isolate the process from RDK or the robot.
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
-export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-0}"
+export ROS_LOCALHOST_ONLY=0
 
 set +u
 source "/opt/ros/${ros_distro}/setup.bash"

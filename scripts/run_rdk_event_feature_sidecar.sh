@@ -30,6 +30,7 @@ set +u
 source "$tros_setup"
 set -u
 export ROS_DOMAIN_ID="$ros_domain_id"
+export ROS_LOCALHOST_ONLY=0
 
 if ! ros2 topic list -t 2>/dev/null | grep -Fq "$events_topic [sensor_msgs/msg/PointCloud2]"; then
   echo "Event input topic is unavailable or has the wrong type: $events_topic" >&2
@@ -39,6 +40,7 @@ fi
 
 echo "RDK_EVENT_SIDECAR_START=1"
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+echo "ROS_LOCALHOST_ONLY=$ROS_LOCALHOST_ONLY"
 echo "RDK_USER=$DG_RDK_USER"
 echo "RDK_HOST=$DG_RDK_HOST"
 echo "RDK_WORKSPACE=$DG_RDK_WORKSPACE"

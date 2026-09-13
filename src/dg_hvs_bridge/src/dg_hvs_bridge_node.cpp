@@ -402,7 +402,10 @@ private:
       if (!csv_file_) {
         throw std::runtime_error("cannot open event CSV recording file");
       }
-      csv_file_ << "timestamp_us,x,y,polarity\n";
+      // Keep the recorded CSV compatible with the documented EVT2 export and
+      // auxiliary_sensor_data parser.  The timestamp remains in microseconds;
+      // only the canonical column order/name is important for replay.
+      csv_file_ << "x,y,polarity,timestamp\n";
     }
     std::ofstream config_file(recording_session_dir_ / "capture_config.txt");
     config_file << "camera_name=" << camera_name_ << "\n"
@@ -1018,8 +1021,8 @@ private:
     evt2_writer_.writeEvents(events);
     if (record_csv_enabled_) {
       for (const auto & event : events) {
-        csv_file_ << event.t << ',' << event.x << ',' << event.y << ','
-                  << (event.polarity ? 1 : 0) << '\n';
+        csv_file_ << event.x << ',' << event.y << ','
+                  << (event.polarity ? 1 : 0) << ',' << event.t << '\n';
       }
     }
   }

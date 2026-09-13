@@ -255,11 +255,17 @@ def create_node(node_name: str) -> Any:
                 else "DG mmWave Input"
             )
             has_data = int(metrics.get("event_count", metrics.get("detection_count", 0))) > 0
+            # Use the same quality vocabulary as the live HVS bridge and the
+            # transport monitor.  ``DATA_VALID`` is retained as an explicit
+            # compatibility field below, but must not be used as the state:
+            # MODEL-2 gates accept GOOD/STATIC_IDLE/READY only.
+            quality_state = "GOOD" if has_data else "FAULT"
             status.level = DiagnosticStatus.OK if has_data else DiagnosticStatus.WARN
-            status.message = "DATA_VALID" if has_data else "NO_DATA"
+            status.message = quality_state
             values = {
                 "sensor_kind": self._sensor_kind,
-                "state": status.message,
+                "state": quality_state,
+                "data_valid": has_data,
                 "source_kind": self._source_kind,
                 "source_timestamp_us": source_timestamp_us,
                 "source_file": self._input_path.name,

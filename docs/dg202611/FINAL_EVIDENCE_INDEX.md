@@ -16,12 +16,14 @@
 | E09 | MODEL-3完整状态闭环 | 真实ROS 2日志和状态时间线 | PENDING | 重定位、候选拒绝、恢复 |
 | E10 | 用户现场实机运动 | 现场日志、照片、rosbag | PENDING | 低速受控验证 |
 | E11 | 双板现场只读核验 | `docs/dg202611/LIVE_INTEGRATION_AUDIT_20260913.md` | READY | 部署版本、服务、输入缺口和时钟状态 |
+| E12 | 最终验收命令清单 | `docs/dg202611/FINAL_ACCEPTANCE_COMMANDS_20260913.md` | READY | 现场按顺序执行静态、回放和实机验收 |
 
 ## 现有文件清单
 
 - `docs/dg202611/UWB_MEASURED_RESULTS.md`
 - `docs/dg202611/RDK_HVS_BRIDGE_STATUS_20260912.md`
 - `docs/dg202611/AUXILIARY_TRANSPORT_ONLY.md`
+- `docs/dg202611/FINAL_ACCEPTANCE_COMMANDS_20260913.md`
 - `src/ylhb_base/data/uwb/20260905/README.md`
 - `src/dg_hvs_bridge/README.md`
 

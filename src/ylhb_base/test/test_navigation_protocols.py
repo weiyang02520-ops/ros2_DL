@@ -202,6 +202,18 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertNotIn("ros2 topic pub", runner)
         self.assertNotIn("/home/nvidia/ros2_DL/src", installer)
 
+    def test_cross_board_runner_forces_non_localhost_transport(self) -> None:
+        runner = DG_RUNNER.read_text(encoding="utf-8")
+        self.assertIn('export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"', runner)
+        self.assertIn("export ROS_LOCALHOST_ONLY=0", runner)
+        self.assertNotIn('export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-0}"', runner)
+        for sidecar in (
+            REPOSITORY_ROOT / "scripts" / "run_rdk_event_feature_sidecar.sh",
+            REPOSITORY_ROOT / "scripts" / "run_rdk_event_csv_replay.sh",
+        ):
+            text = sidecar.read_text(encoding="utf-8")
+            self.assertIn("export ROS_LOCALHOST_ONLY=0", text)
+
     def test_dg_inspection_uses_base_ui_and_single_bridge_owner(self) -> None:
         runner = DG_INSPECTION_RUNNER.read_text(encoding="utf-8")
         jetson = (REPOSITORY_ROOT / "scripts" / "run_on_jetson.sh").read_text(encoding="utf-8")
