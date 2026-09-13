@@ -2,7 +2,7 @@
 
 **用途**：给现场人员按顺序执行的命令模板。命令分为只读检查、观察模式和用户实机动作；不能把前两类结果当作实机运动或精度指标。
 
-**当前基线**：本地代码提交 `9d34c8e`，机器人当前仍是旧部署 `c75d48e`。部署新包前只做检查和回放，不打开底盘电源、不发送 `/cmd_vel`。
+**当前基线**：本地开发分支已有带提交号的发布包，机器人当前仍是旧部署 `c75d48e`。部署新包前只做检查和回放，不打开底盘电源、不发送 `/cmd_vel`。
 
 ## 1. 两板环境记录（只读）
 
@@ -43,7 +43,7 @@ ps -ef | grep -E '[e]vs|[h]vs|[d]g_hvs|[a]px003cc' || true
 两板都设置 ROS 环境后，在 RDK 发布一次诊断消息：
 
 ```bash
-ros2 topic pub --once /dg/link_test std_msgs/msg/String \\
+ros2 topic pub --once /dg/link_test std_msgs/msg/String \
   "{data: 'rdk_to_jetson_20260913'}"
 ```
 
@@ -104,10 +104,10 @@ timeout 15 ros2 topic echo /dg/auxiliary/transport_quality --once
 在已构建的 Linux ROS 2 工作区中执行，使用默认已采集静态文件：
 
 ```bash
-ros2 launch ylhb_base dg_navigation_integration.launch.py \\
-  enable_nav2:=false \\
-  enable_cmd_vel_arbiter:=false \\
-  enable_uwb_replay:=true \\
+ros2 launch ylhb_base dg_navigation_integration.launch.py \
+  enable_nav2:=false \
+  enable_cmd_vel_arbiter:=false \
+  enable_uwb_replay:=true \
   enable_mmwave_dynamic_mask:=false
 ```
 
@@ -126,12 +126,12 @@ timeout 15 ros2 topic echo /dg/fusion/pose --once
 取得真实厂家数据并转换为规范化 CSV 后才执行：
 
 ```bash
-ros2 launch ylhb_base dg_navigation_integration.launch.py \\
-  enable_nav2:=false \\
-  enable_cmd_vel_arbiter:=false \\
-  enable_mmwave_replay:=true \\
-  mmwave_input_file:=/absolute/path/normalized_mmwave.csv \\
-  enable_mmwave_observation:=true \\
+ros2 launch ylhb_base dg_navigation_integration.launch.py \
+  enable_nav2:=false \
+  enable_cmd_vel_arbiter:=false \
+  enable_mmwave_replay:=true \
+  mmwave_input_file:=/absolute/path/normalized_mmwave.csv \
+  enable_mmwave_observation:=true \
   enable_mmwave_dynamic_mask:=false
 ```
 
