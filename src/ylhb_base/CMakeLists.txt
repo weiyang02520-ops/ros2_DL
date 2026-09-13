@@ -115,6 +115,7 @@ install(PROGRAMS
   scripts/cmd_vel_arbiter_core.py
   scripts/multisource_fusion_core.py
   scripts/auxiliary_sensor_data.py
+  scripts/mmwave_interface.py
   scripts/event_feature_core.py
   scripts/hybrid_vision_assist_core.py
   scripts/pointcloud_reader.py
@@ -222,6 +223,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_multisource_fusion_protocols test/test_multisource_fusion_protocols.py)
   ament_add_pytest_test(test_event_feature_core test/test_event_feature_core.py)
   ament_add_pytest_test(test_pointcloud_reader test/test_pointcloud_reader.py)
+  ament_add_pytest_test(test_mmwave_interface test/test_mmwave_interface.py)
   ament_add_pytest_test(test_auxiliary_sensor_validation test/test_auxiliary_sensor_validation.py)
   ament_add_pytest_test(test_auxiliary_session_tool test/test_auxiliary_session_tool.py)
   ament_add_pytest_test(test_beidou_short_message_contract test/test_beidou_short_message_contract.py)
