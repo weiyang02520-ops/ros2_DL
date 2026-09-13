@@ -8,7 +8,7 @@
 | E01 | 三模型核心测试 | `src/ylhb_base/test/` | READY | 保护确定性逻辑，不代表实机 |
 | E02 | UWB真实原始日志和CSV | `src/ylhb_base/data/uwb/20260905/`、`evidence/uwb/20260905/` | READY | 回放、质量门控、3物理源/6逻辑接口 |
 | E03 | RDK事件相机本地长测 | RDK历史记录目录及其哈希清单 | 历史READY/本次PENDING | 历史EVS/APS采集；本次设备尚未识别 |
-| E04 | RDK→NVIDIA DDS发现 | 两侧`/dg/link_test`和`ros2 topic list` | PENDING | 跨板传输证明 |
+| E04 | RDK↔NVIDIA DDS基础发现 | 两侧`/dg/link_test`双向收发 | READY（基础发现）/PENDING（业务话题） | 基础跨板连通；事件业务话题持续接收仍待完成 |
 | E05 | 事件特征和质量到达Jetson | `/dg/event_camera/features`、`/dg/event_camera/quality` | PENDING | MODEL-2观察调用 |
 | E06 | 传输时间审计 | `/dg/auxiliary/transport_quality` | READY（代码）/PENDING（实机） | 新鲜度和延迟记录 |
 | E07 | UWB进入MODEL-1 | `/dg/uwb/quality`、`/dg/fusion/status` | PENDING | `UWB_AIDED`消费证据 |

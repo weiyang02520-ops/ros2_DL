@@ -48,9 +48,9 @@ LiDAR、IMU、轮速、GNSS、AMCL、scan-match ──────────�
 
 ## 4. 证据状态
 
-当前已有软件协议、UWB真实采集和RDK历史本地采集文件。2026-09-13只读核验确认机器人三模型观察服务和Mobile Bridge正在运行，但机器人底层传感器没有启动；RDK当前也没有识别到事件相机。以下事项仍需在Linux ROS 2或真实设备上完成：
+当前已有软件协议、UWB真实采集和RDK历史本地采集文件。2026-09-13只读核验确认两板`/dg/link_test`双向DDS基础发现成功，机器人三模型观察服务和Mobile Bridge正在运行，但机器人底层传感器没有启动；RDK当前也没有识别到事件相机。以下事项仍需在Linux ROS 2或真实设备上完成：
 
-- RDK到NVIDIA的DDS发现和持续接收；
+- RDK业务事件话题到NVIDIA的DDS持续接收；
 - 当前 `root`账号和当前HBN配置下的30至60秒事件相机长测；
 - Jetson端对事件数据的实际接收证据；
 - UWB回放进入MODEL-1后的`UWB_AIDED`状态证据；
