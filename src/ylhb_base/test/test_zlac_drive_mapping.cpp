@@ -118,7 +118,7 @@ TEST(ZlacChannelMappingTest, BaseKinematicsConfigUsesCalibratedFieldMapping)
     (std::istreambuf_iterator<char>(config_stream)), std::istreambuf_iterator<char>());
 
   EXPECT_NE(config.find("low_channel_is_left: true"), std::string::npos);
-  EXPECT_NE(config.find("linear_axis_direction: -1.0"), std::string::npos);
+  EXPECT_NE(config.find("linear_axis_direction: 1.0"), std::string::npos);
   EXPECT_NE(config.find("low_channel_direction: 1.0"), std::string::npos);
   EXPECT_NE(config.find("high_channel_direction: -1.0"), std::string::npos);
 }

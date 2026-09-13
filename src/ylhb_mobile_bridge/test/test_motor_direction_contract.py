@@ -21,6 +21,6 @@ def test_zlac_driver_owns_longitudinal_axis_calibration():
         source_root / "ylhb_base" / "src" / "zlac8015d_canopen_controller.cpp"
     ).read_text(encoding="utf-8")
 
-    assert "linear_axis_direction: -1.0" in config
+    assert "linear_axis_direction: 1.0" in config
     assert "command_to_internal(msg->linear.x, msg->angular.z)" in controller
     assert "feedback_to_external(internal_vx, internal_wz)" in controller
