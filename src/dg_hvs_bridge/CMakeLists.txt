@@ -113,6 +113,11 @@ set_target_properties(dg_hvs_bridge_node PROPERTIES
 install(TARGETS dg_hvs_bridge_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 install(FILES include/dg_hvs_hbn_backend.h DESTINATION include/${PROJECT_NAME})
-install(PROGRAMS scripts/run_hvs_capture_session.sh scripts/run_three_view_capture.sh DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS
+  scripts/run_hvs_capture_session.sh
+  scripts/run_three_view_capture.sh
+  scripts/show_fused_image.py
+  scripts/run_hvs_display.sh
+  DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
