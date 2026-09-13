@@ -167,7 +167,7 @@ bash probe_rdk_x5_event_camera.sh
 
 ## 历史桥接状态（2026-09-12）
 
-以下内容是历史记录，提交`a39b086`早于当前HEAD`318d951`，用于保留演进轨迹。已在独立集成分支`codex/dg-robot-integration`完成`dg_hvs_bridge`的第一轮加固，本轮包含：
+以下内容是历史记录，提交`a39b086`早于当前证据基线`4f3ffb4`，用于保留演进轨迹。已在独立集成分支`codex/dg-robot-integration`完成`dg_hvs_bridge`的第一轮加固，本轮包含：
 
 - EVS、APS、融合图、运动掩码、CameraInfo、质量诊断和可选 features 话题；
 - APS 实际格式、尺寸、字节数、取帧超时、解码失败、APS 帧率和事件包率统计；

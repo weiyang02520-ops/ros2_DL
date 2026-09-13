@@ -18,7 +18,7 @@
 | E11 | 双板现场只读核验 | `docs/dg202611/LIVE_INTEGRATION_AUDIT_20260913.md` | READY | 部署版本、服务、输入缺口和时钟状态 |
 | E12 | 最终验收命令清单 | `docs/dg202611/FINAL_ACCEPTANCE_COMMANDS_20260913.md` | READY | 现场按顺序执行静态、回放和实机验收 |
 | E13 | RDK HBN目标架构编译 | RDK `dg_hvs_bridge_node`目标文件及CMake输出；目标SHA-256=`2c69c888021834ef4ffd79900216fa9a3c81115f714f30a91bcfe8aa9736d93b` | READY（编译）/PENDING（运行） | 证明官方HBN后端在RDK目标架构上可构建，不替代实时业务接收证据 |
-| E14 | 当前HEAD本地发布包 | `dg202611_ws_318d951.tar.gz`、`dg202611_release_318d951.patch`及对应SHA-256清单 | READY | 发布包绑定到`318d951`，供后续审计和部署前复核 |
+| E14 | 最终本地发布包 | 工作区根目录中按最终本地提交短 SHA 命名的 `dg202611_ws_<commit>.tar.gz`、`dg202611_release_<commit>.patch` 及对应 SHA-256 清单 | READY（最终包按本地提交生成并单独核验） | 发布包、补丁、源码清单和提交号一致，供部署前复核 |
 
 ## 现有文件清单
 
