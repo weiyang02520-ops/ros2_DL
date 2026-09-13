@@ -129,6 +129,9 @@ system_supervisor_node:
     system_status_topic: /inspection_ai/system_status
     system_mode_topic: /inspection_ai/system_mode
     cmd_vel_topic: /cmd_vel
+    base_backend: zlac
+    zlac_status_topic: /zlac8015d/status
+    chassis_status_max_age_sec: 2.5
     workspace_dir: ""
     route_directory: ""
     patrol_route_path: auto
