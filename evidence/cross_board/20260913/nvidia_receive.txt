@@ -1,0 +1,203 @@
+timestamp_utc=2026-09-13T05:40:35Z
+host=nvidia-desktop
+ros_domain_id=0
+ros_localhost_only=0
+rmw_implementation=rmw_fastrtps_cpp
+
+=== topic list ===
+/dg/event_camera/aps/image_raw [sensor_msgs/msg/Image]
+/dg/event_camera/aps/image_raw/compressed [sensor_msgs/msg/CompressedImage]
+/dg/event_camera/camera_info [sensor_msgs/msg/CameraInfo]
+/dg/event_camera/events [sensor_msgs/msg/PointCloud2]
+/dg/event_camera/feature_quality [diagnostic_msgs/msg/DiagnosticArray]
+/dg/event_camera/features [sensor_msgs/msg/PointCloud2]
+/dg/event_camera/fused/image [sensor_msgs/msg/Image]
+/dg/event_camera/fused/image/compressed [sensor_msgs/msg/CompressedImage]
+/dg/event_camera/motion_mask [sensor_msgs/msg/Image]
+/dg/event_camera/quality [diagnostic_msgs/msg/DiagnosticArray]
+
+=== features info ===
+Type: sensor_msgs/msg/PointCloud2
+
+Publisher count: 1
+
+Node name: dg_hvs_bridge_node
+Node namespace: /
+Topic type: sensor_msgs/msg/PointCloud2
+Endpoint type: PUBLISHER
+GID: 01.0f.67.d9.5a.4f.14.f5.00.00.00.00.00.00.1a.03.00.00.00.00.00.00.00.00
+QoS profile:
+  Reliability: BEST_EFFORT
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+  Lifespan: Infinite
+  Deadline: Infinite
+  Liveliness: AUTOMATIC
+  Liveliness lease duration: Infinite
+
+Subscription count: 0
+
+
+=== feature_quality info ===
+Type: diagnostic_msgs/msg/DiagnosticArray
+
+Publisher count: 1
+
+Node name: dg_hvs_bridge_node
+Node namespace: /
+Topic type: diagnostic_msgs/msg/DiagnosticArray
+Endpoint type: PUBLISHER
+GID: 01.0f.67.d9.5a.4f.14.f5.00.00.00.00.00.00.1b.03.00.00.00.00.00.00.00.00
+QoS profile:
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+  Lifespan: Infinite
+  Deadline: Infinite
+  Liveliness: AUTOMATIC
+  Liveliness lease duration: Infinite
+
+Subscription count: 0
+
+
+=== quality sample ===
+header:
+  stamp:
+    sec: 1789278041
+    nanosec: 137798930
+  frame_id: event_camera_optical_frame
+status:
+- level: "\0"
+  name: dg/event_camera/quality
+  message: GOOD
+  hardware_id: apx003cc_hvs
+  values:
+  - key: state
+    value: GOOD
+  - key: evs_fresh
+    value: 'true'
+  - key: aps_fresh
+    value: 'true'
+  - key: pair_valid
+    value: 'true'
+  - key: pair_skew_ms
+    value: '0.018875'
+  - key: pair_tolerance_ms
+    value: '40.000000'
+  - key: event_rate_per_sec
+    value: '124981.074087'
+  - key: event_packets_per_sec
+    value: '30.000258'
+  - key: aps_rate_per_sec
+    value: '30.000258'
+  - key: static_event_rate_threshold
+    value: '500.000000'
+  - key: evs_packets
+    value: '7223'
+  - key: decoded_events
+    value: '30091018'
+  - key: published_events
+    value: '2406000'
+  - key: aps_frames
+    value: '7221'
+  - key: aps_packets
+    value: '7221'
+  - key: aps_width
+    value: '1632'
+  - key: aps_height
+    value: '1224'
+  - key: aps_format
+    value: NV12
+  - key: aps_bytes
+    value: '2996352'
+  - key: aps_decode_failures
+    value: '0'
+  - key: get_frame_timeouts
+    value: '0'
+  - key: evs_get_frame_errors
+    value: '0'
+  - key: aps_get_frame_errors
+    value: '0'
+  - key: last_evs_get_frame_error
+    value: '0'
+  - key: last_aps_get_frame_error
+    value: '0'
+  - key: fused_frames
+    value: '1203'
+  - key: skipped_fused_frames
+    value: '0'
+  - key: dropped_event_messages
+    value: '4817'
+  - key: rate_limited_packets
+    value: '7223'
+  - key: features_enabled
+    value: 'true'
+  - key: feature_count
+    value: '236'
+  - key: feature_min_unique_pixels
+    value: '3'
+  - key: feature_match_distance_px
+    value: '12.000000'
+  - key: feature_packets
+    value: '2406'
+  - key: unsupported_aps_frames
+    value: '0'
+  - key: recording_enabled
+    value: 'false'
+  - key: afk_filter_enabled
+    value: 'false'
+  - key: clock_basis
+    value: ros_receipt_time_with_sensor_pair_diagnostics
+  - key: publishes_cmd_vel
+    value: 'false'
+---
+
+=== feature_quality sample ===
+header:
+  stamp:
+    sec: 1789278043
+    nanosec: 768958278
+  frame_id: event_camera_optical_frame
+status:
+- level: "\0"
+  name: dg/event_camera/feature_quality
+  message: COMPARED
+  hardware_id: apx003cc_hvs
+  values:
+  - key: state
+    value: GOOD
+  - key: quality
+    value: GOOD
+  - key: repeatability_status
+    value: COMPARED
+  - key: repeatability
+    value: '0.751566'
+  - key: feature_count
+    value: '246'
+  - key: event_count
+    value: '4166'
+  - key: unique_pixel_count
+    value: '960'
+  - key: feature_match_distance_px
+    value: '12.000000'
+  - key: feature_packets
+    value: '2433'
+  - key: frame_id
+    value: event_camera_optical_frame
+  - key: observation_only
+    value: 'true'
+  - key: publishes_cmd_vel
+    value: 'false'
+---
+
+=== features hz ===
+average rate: 9.930
+	min: 0.026s max: 0.183s std dev: 0.03403s window: 11
+average rate: 8.601
+	min: 0.001s max: 0.394s std dev: 0.08409s window: 19
+average rate: 9.921
+	min: 0.001s max: 0.394s std dev: 0.08707s window: 32
+average rate: 9.204
+	min: 0.001s max: 0.424s std dev: 0.10326s window: 41
+average rate: 9.887
+	min: 0.001s max: 0.424s std dev: 0.09972s window: 55

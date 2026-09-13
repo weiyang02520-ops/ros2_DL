@@ -9,7 +9,7 @@
 事件相机官方 CSV 解析:  已完成
 事件相机 ROS 2 回放:    已完成
 事件特征/重复率侧链:    已完成，等待真实数据调参
-毫米波真实驱动:         等待实物和厂商协议
+毫米波真实驱动:         已有厂商 Demo 协议资料，等待目标实物型号/原始帧
 毫米波规范化 CSV 解析:  已完成
 毫米波 ROS 2 回放:      已完成
 毫米波辅助动态点剔除:   已完成，默认关闭，等待协议/外参/真实数据验证
@@ -62,7 +62,7 @@ RDK X5 和 Jetson 是两台计算机。相机先接 RDK X5；真实运行时可�
 
 ## 毫米波雷达链路
 
-当前没有拿到 HU293 对应的权威数据手册和包格式，代码没有猜串口字节。先保留每个原始字节，再用厂商协议转换成下面的规范化 CSV：
+用户提供目录已包含 4D 成像雷达使用说明和 Demo 输出协议，但产品资料列出多个型号，尚未确认 HU293 对应实物、固件和完整字节序。代码不猜串口字节；先保留每个原始字节，再用目标型号协议转换成下面的规范化 CSV：
 
 ```csv
 timestamp_us,frame_id,track_id,x_m,y_m,z_m,radial_velocity_mps,snr_db,confidence
@@ -76,7 +76,7 @@ timestamp_us,frame_id,track_id,x_m,y_m,z_m,radial_velocity_mps,snr_db,confidence
 
 启用 `enable_mmwave_dynamic_mask` 后，MODEL-2 只接受 frame、时间新鲜度、径向速度、SNR 和置信度均合格的检测，再根据 `mmwave_to_lidar_x/y/yaw` 转到激光坐标系，剔除同方位、同距离的激光点。诊断同时保留纯激光的 `raw_temporal_match_ratio` 和融合后的动态扇区/点数量，便于证明毫米波是否真正被消费。该开关默认关闭；安装外参未测量前不得在正式结果中启用。
 
-实物到手后必须先向商家取得：完整型号、UART/CAN 选择、电压和电平、引脚、波特率/CAN 速率、帧头帧尾、字节序、校验、坐标轴、单位、最大目标数、输出频率和 ROS/上位机资料。只要这些信息确定，厂商解码器可以接在规范化 CSV 或上述 ROS 2 接口前，不需要改三模型的外部接口。
+当前厂商说明书给出的 Demo 串口默认值是 3000000 baud、8N1，并给出了帧头、帧尾和点字段；实物到手后仍必须核对完整型号、固件、UART/CAN 选择、电压和电平、引脚、实际波特率/CAN 速率、字节序、校验、坐标轴、单位、最大目标数、输出频率和 ROS/上位机资料。只要这些信息确定，厂商解码器可以接在规范化 CSV 或上述 ROS 2 接口前，不需要改三模型的外部接口。
 
 ## 现有工具
 
@@ -109,7 +109,7 @@ python3 scripts/validate_auxiliary_sensor_data.py mmwave /data/mmwave.csv \
 ```bash
 python3 scripts/capture_serial_sensor_raw.py \
   --device /dev/ttyUSB0 \
-  --baud <商家给出的波特率> \
+  --baud 3000000 \
   --duration-sec 60 \
   --sensor HU293 \
   --output-dir /data/mmwave_capture_001

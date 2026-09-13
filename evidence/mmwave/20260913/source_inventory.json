@@ -1,0 +1,93 @@
+{
+  "generated_at": "2026-09-13",
+  "source_root_label": "C:/Users/peng/Desktop/产品资料——成像上位机及协议/产品资料——成像上位机及协议",
+  "classification": "vendor_materials_no_raw_measurement_capture_found",
+  "raw_measurement_extensions_checked": [
+    ".csv",
+    ".bin",
+    ".dat",
+    ".log",
+    ".pcap",
+    ".json"
+  ],
+  "files": [
+    {
+      "relative_path": "05ee300a3fb6caa3e97f7392e481e550.jpg",
+      "size_bytes": 101195,
+      "sha256": "3b7d3759ab43d3c42234940638383c8715820419c76b037a48067db5e3c828e9",
+      "role": "image_or_demo_media"
+    },
+    {
+      "relative_path": "118c49e160a6eadd580c1c844559db99.mp4",
+      "size_bytes": 1347131,
+      "sha256": "3872380c4bd885c66a2f8baf99179e44f2110ab731f053acd65d4b889b5fdd1b",
+      "role": "image_or_demo_media"
+    },
+    {
+      "relative_path": "4D成像雷达使用说明（上手必看）.pdf",
+      "size_bytes": 2366765,
+      "sha256": "ce4845fb16af69aab74d658932bb16ac35c4ad08c8ea6ac5cf3ee2fc1db16464",
+      "role": "protocol_or_document"
+    },
+    {
+      "relative_path": "4D成像雷达使用说明（上手必看）.pdf.txt",
+      "size_bytes": 6163,
+      "sha256": "e097b439ffb497e2ce20bdaa92bc6150281112ff11200464e955b82138c5850a",
+      "role": "protocol_or_document"
+    },
+    {
+      "relative_path": "6a31abb17972c1001db27f29860e4736.png",
+      "size_bytes": 55252,
+      "sha256": "48845865fd4cfae67e4afdaf3c84bbc9b704d12528c406fcb75193afafe57da8",
+      "role": "image_or_demo_media"
+    },
+    {
+      "relative_path": "6ee90676b58d0316db3d1daa25769586.mp4",
+      "size_bytes": 1605992,
+      "sha256": "3b36acbdb96e3996a97c2d8e287d15f41b561b11fe7782084968a3015ad97c61",
+      "role": "image_or_demo_media"
+    },
+    {
+      "relative_path": "7b3d5c7ea8213601c532f59ded997273.mp4",
+      "size_bytes": 5256622,
+      "sha256": "3050280b1d84b1b0e97948a26d4c753519c9a2b9b8271cd37275991af74bc877",
+      "role": "image_or_demo_media"
+    },
+    {
+      "relative_path": "串口驱动/CH343CDC.EXE",
+      "size_bytes": 199872,
+      "sha256": "a79692797ead0050882938b1e48a80f37d51070a5039e189dc47deb9f4679f41",
+      "role": "tool_or_driver"
+    },
+    {
+      "relative_path": "办公室人体成像视频.mp4",
+      "size_bytes": 37234946,
+      "sha256": "27afd180bf8aecf0df7b4ca5a222b6c0dec9cb0c75d13211b42d38ec443e1b3e",
+      "role": "image_or_demo_media"
+    },
+    {
+      "relative_path": "成像上位机及协议/CalterahRadarAppMgmtToolSetup_V3.2.1_indoor.exe",
+      "size_bytes": 98788590,
+      "sha256": "065b2476f40f5f5ffc5ef0a263150abbc52d3431aa7e8e42a11a6cb6c5fce89b",
+      "role": "tool_or_driver"
+    },
+    {
+      "relative_path": "成像上位机及协议/~$成像雷达使用说明.xlsx",
+      "size_bytes": 165,
+      "sha256": "606e9d882795ae2a07d32ada28de4953fff0d7e14106eb0afb0a968cf551c3d4",
+      "role": "protocol_or_document"
+    },
+    {
+      "relative_path": "雷达产品介绍资料.pdf",
+      "size_bytes": 2870533,
+      "sha256": "09e63a93205c14f788debf2b9aec61d9559e5f1d1bd75f61f85fec22bf6a3237",
+      "role": "protocol_or_document"
+    },
+    {
+      "relative_path": "雷达产品介绍资料.pdf.txt",
+      "size_bytes": 9986,
+      "sha256": "2bc7f10c9f30935712c94ee54296a127f0c407b1df7307c3624d183ec87bbdf7",
+      "role": "protocol_or_document"
+    }
+  ]
+}

@@ -1,40 +1,42 @@
 # DG-202611 双板现场只读核验（2026-09-13）
 
-本记录只包含只读检查。未修改机器人基础工作区、机器人备份、RDK备份或设备配置，未启动Nav2、底盘bringup或运动指令。
+本记录只包含只读检查和已形成的采集证据。未修改机器人基础工作区、机器人备份、RDK基础备份或设备配置，未启动Nav2、底盘bringup或运动指令。
+
+## 版本与边界
+
+- 本地开发分支：`codex/dg-robot-integration`；当前HEAD：`318d9510b7ab0b8ad3c181d01b842f57e0ca03e0`；工作区核验时干净。
+- 本地发布包、补丁和源码SHA-256清单均绑定到`318d951`。
+- 本次核验区分三层事实：RDK目标架构编译、两板DDS基础发现、RDK本地真实采集/业务话题发布。编译通过和基础DDS通过均不能替代NVIDIA业务接收或机器人实机闭环。
 
 ## NVIDIA机器人
 
-- 机器人网络和SSH正常，当前无线地址为`192.168.43.12`；
-- `dg202611-models.service`和`ylhb-mobile-bridge.service`均为运行状态并已设为开机启动；
-- 当前部署软链指向`/home/nvidia/dg202611_ws_c75d48e`，部署记录中的提交为`c75d48e`，基础工作区未被该发布包修改；
-- 当前部署版本早于本地开发分支的最新发布提交；本地工作区已干净，因此安全门控、传输审计和启动修复均已在本地提交，但尚未部署到机器人；
-- 三模型以观察模式运行：Nav2关闭、速度仲裁器关闭、UWB实时回放关闭，`recovery_motion_armed=false`；
-- `/scan`、`/odom`、`/imu/data`当前没有发布者，ZLAC、RPLidar、IMU和EKF底层进程没有启动；
-- `/cmd_vel`存在基础UI/命令节点的发布端，但没有底盘订阅端；本次没有发送运动指令；
-- 三模型状态为`STANDBY/INITIALIZING`，原因是巡检任务未激活且底层传感器输入不存在；
-- Mobile Bridge本地监听正常；云平台心跳和地图上传出现`URLError/HTTP 503`，属于外部云平台不可用，不代表本地桥或SSH离线；
-- 当前UI由旧DG部署中的`ylhb_llm`启动。本地待提交脚本已经改为使用受保护基础工作区UI，并让Mobile Bridge只由systemd管理，需在新版本部署后复核。
-- 与RDK的`/dg/link_test`双向收发已成功；这只证明基础DDS发现和网络路径，不能替代事件相机业务话题持续接收证据。
+- 机器人网络和SSH正常，当前无线地址为`192.168.43.12`。
+- 当前部署软链指向`/home/nvidia/dg202611_ws_c75d48e`，部署记录中的提交为`c75d48e`；本地`318d951`尚未部署，基础工作区未被本次本地开发修改。
+- `dg202611-models.service`和`ylhb-mobile-bridge.service`处于运行状态并已设为开机启动；三模型当前保持观察模式，Nav2、速度仲裁器和UWB实时回放关闭，`recovery_motion_armed=false`。
+- `/scan`、`/odom`、`/imu/data`当时没有发布者，ZLAC、RPLidar、IMU和EKF底层进程没有启动；`/cmd_vel`存在UI/命令节点发布端，但没有底盘订阅端。本次没有发送运动指令。
+- 三模型状态为`STANDBY/INITIALIZING`，原因是巡检任务未激活且底层传感器输入不存在。
+- Mobile Bridge本地监听正常；云平台心跳和地图上传出现`URLError/HTTP 503`，属于外部云平台不可用，不代表本地桥或SSH离线。
+- 与RDK的`/dg/link_test`双向收发已成功；事件业务话题跨板接收也已通过，详见下方证据。`/dg/auxiliary/transport_quality`仍待新版传输监视器部署。
 
 ## RDK X5
 
-- RDK网络和SSH正常，当前无线地址为`192.168.43.13`；
-- ROS 2 Humble、TROS和官方APX003CC样例均存在；
-- 历史事件相机工作区和记录目录仍在；
-- 当前没有`/dev/video*`、`/dev/media*`或`/dev/v4l-subdev*`，没有事件相机采集、HBN桥或DG事件话题；
-- 内核只显示VIN/MIPI控制器初始化，没有本次传感器被识别的证据；
-- 系统时间回到`2000-01-01`且未同步。修正时间同步前，不能用跨板时间戳计算真实延迟，也不能把本次文件时间写进证据索引。
+- RDK网络和SSH正常，当前无线地址为`192.168.43.13`，当前使用`root`账号。
+- ROS 2 Humble、TROS和官方APX003CC样例存在；厂商样例实时识别已看到EVS约208.5–208.75 FPS、APS约29.79–29.82 FPS，`VC0/VC1`均ready。
+- RDK目标架构独立验证目录中的`dg_hvs_bridge_node`已使用官方HBN后端完成编译和链接：`/root/dg202611_hvs_verify_20260913_1228/build2/dg_hvs_bridge_node`，SHA-256为`2c69c888021834ef4ffd79900216fa9a3c81115f714f30a91bcfe8aa9736d93b`。这只证明构建成功。
+- RDK真实事件相机采集证据位于`/root/dg202611_hvs_live_20260913/20260913_130147_apx003cc`，包含约2,033,009行`events.csv`、约511MB`events.raw8`、约1.15GB`events.evt2`、218张APS图和2张融合图；原始文件SHA-256已写入`source_sha256.txt`。
+- 当前独立桥接实例运行于验证目录，已在RDK本地发布：`/dg/event_camera/features`、`/dg/event_camera/feature_quality`、`/dg/event_camera/quality`、`/dg/event_camera/camera_info`、`/dg/event_camera/events`、`/dg/event_camera/motion_mask`、`/dg/event_camera/aps/image_raw`、`/dg/event_camera/fused/image`。运行时显式设置`LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRARY_PATH:-}"`后，桥接正常工作。
+- NVIDIA于2026-09-13T05:40:35Z发现全部事件业务话题，并收到`/dg/event_camera/quality=GOOD`、`/dg/event_camera/feature_quality=COMPARED`，features约9.2–9.9 Hz。证据为`evidence/cross_board/20260913/nvidia_receive.txt`，SHA-256为`f830d919bc9f5208e2672a50fa1008a0af8e96c62a948e43ff107929fe68e408`；当前可记录`CROSS_BOARD_RECEIVE_PASS`。
+- `/dg/auxiliary/transport_quality`新版监视器尚未部署，因此只记录业务接收通过，不填写该话题的新鲜度或延迟结论。此前现场记录曾发现RDK系统时间回到2000年；在最新`date -Is`和校时结果确认前，不填写跨板真实延迟。
 
 ## 当前结论
 
-代码侧的三模型、UWB回放和辅助传感器观察接口已经具备。本次现场已形成双向DDS基础链路，但还未形成事件相机跨板业务数据，也没有底层机器人传感器输入，所以不能把当前状态写成三模型实机闭环完成。
+代码侧三模型、UWB回放和辅助传感器观察接口已经具备；RDK HBN目标架构已编译，RDK真实相机采集、本地话题发布和NVIDIA跨板业务接收均已形成证据，两板基础DDS已通过。尚未完成的是新版`transport_quality`监视器部署、UWB回放进入MODEL-1的状态证据、毫米波真实数据、三模型真实ROS 2闭环，以及用户现场静止和低速运动验收。
 
 下一次现场顺序固定为：
 
-1. 确认RDK事件相机MIPI排线、载板和供电；
-2. 恢复RDK正确系统时间并记录两板时钟；
-3. 确认事件相机设备节点和本地EVS/APS长测；
-4. 完成RDK到NVIDIA的DDS发现、特征和质量话题接收；
-5. 部署本地审核通过的新发布包，并继续保持观察模式；
-6. 底盘电源开启后再启动基础bringup，先检查`/scan`、`/odom`、`/imu/data`、TF和底盘订阅者；
-7. 最后由现场人员执行低速短距离运动验收。
+1. 核实两板系统时间并记录`date -Is`；
+2. 在RDK启动桥前设置`HV_TOOLKIT_ROOT`、`AMENT_PREFIX_PATH`和`LD_LIBRARY_PATH`，然后在NVIDIA先启动业务话题接收端，再启动RDK HBN桥；
+3. 已验证`features + feature_quality + quality + camera_info`跨板接收；待新版监视器部署后再补`assist_quality`和`transport_quality`的完整审计；
+4. 保持观察模式，完成UWB和毫米波回放验收；
+5. 如需上板，先部署绑定`318d951`的新包并复核版本；
+6. 底盘电源开启后由现场人员检查真实`/scan`、`/odom`、`/imu/data`、TF和底盘订阅者，再执行低速短距离动作。

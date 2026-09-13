@@ -84,12 +84,12 @@ chronyc tracking 2>&1 || true
 
 ## 数据保存
 
-毫米波首次接入先保留原始字节：
+毫米波首次接入先保留原始字节。当前资料给出的 Demo 默认串口为 3000000 baud、8N1；若目标实物上位机显示不同值，以实物/固件设置为准：
 
 ```bash
 python3 scripts/capture_serial_sensor_raw.py \
   --device /dev/ttyUSB0 \
-  --baud '<厂商值>' \
+  --baud 3000000 \
   --duration-sec 60 \
   --sensor '<完整型号>' \
   --output-dir '<当前trial>/mmwave_raw'

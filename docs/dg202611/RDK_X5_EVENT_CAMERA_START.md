@@ -20,7 +20,16 @@ export ROS_LOCALHOST_ONLY=0
 ssh "${DG_RDK_USER}@${DG_RDK_HOST}"
 ```
 
-## 当前结论（2026-09-11）
+## 当前状态（2026-09-13）
+
+- RDK目标架构已经使用官方HBN后端完成`dg_hvs_bridge_node`编译和链接，目标文件为`/root/dg202611_hvs_verify_20260913_1228/build2/dg_hvs_bridge_node`，SHA-256为`2c69c888021834ef4ffd79900216fa9a3c81115f714f30a91bcfe8aa9736d93b`。
+- 厂商APX003CC实时样例已经看到EVS约208.5–208.75 FPS、APS约29.79–29.82 FPS，`VC0/VC1`均ready，说明当前RDK侧真实采集链已经得到运行证据。
+- 一次真实采集已保存到`/root/dg202611_hvs_live_20260913/20260913_130147_apx003cc`，包含`events.csv`、`events.raw8`、`events.evt2`、218张APS图、2张融合图和`source_sha256.txt`。这证明RDK本地真实采集和写盘正常。
+- 独立验证桥已在RDK本地发布`/dg/event_camera/features`、`/dg/event_camera/feature_quality`、`/dg/event_camera/quality`、`/dg/event_camera/camera_info`等话题；运行时需显式设置`LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRARY_PATH:-}"`。
+- NVIDIA于2026-09-13T05:40:35Z已发现并持续接收事件业务话题，quality=`GOOD`、feature_quality=`COMPARED`、features约9.2–9.9 Hz；证据为`evidence/cross_board/20260913/nvidia_receive.txt`，SHA-256为`f830d919bc9f5208e2672a50fa1008a0af8e96c62a948e43ff107929fe68e408`。
+- 因此当前分层为：`SOFTWARE_READY`、`RDK_LIVE_CAPTURE_PASS`、`RDK_LOCAL_TOPIC_PASS`、`CROSS_BOARD_RECEIVE_PASS`；`/dg/auxiliary/transport_quality`仍待新版监视器部署。编译通过不等于跨板运行通过，但本次业务话题跨板接收已有实证。
+
+## 历史基线结论（2026-09-11）
 
 事件相机的软件接入路线可以继续，当前状态是：
 
@@ -156,9 +165,9 @@ bash probe_rdk_x5_event_camera.sh
 
 这一步只能在地瓜派专用任务中按已确认的命令执行，不能轮流试错 CAM0/CAM1，也不能跳过镜像核对。
 
-## 2026-09-12 桥接状态
+## 历史桥接状态（2026-09-12）
 
-已在独立集成分支 `codex/dg-robot-integration` 完成 `dg_hvs_bridge` 的第一轮加固，提交为 `a39b086`。本轮包含：
+以下内容是历史记录，提交`a39b086`早于当前HEAD`318d951`，用于保留演进轨迹。已在独立集成分支`codex/dg-robot-integration`完成`dg_hvs_bridge`的第一轮加固，本轮包含：
 
 - EVS、APS、融合图、运动掩码、CameraInfo、质量诊断和可选 features 话题；
 - APS 实际格式、尺寸、字节数、取帧超时、解码失败、APS 帧率和事件包率统计；
@@ -168,7 +177,7 @@ bash probe_rdk_x5_event_camera.sh
 
 当前证据边界仍是：底层厂商双流示例已能看到 EVS 与 APS；官方 Toolkit ROS 桥接此前只稳定拿到 EVS，APS ISP 路径仍报告失败。因此尚未标记 `HVS_DUAL_STREAM_PASS`，也没有把事件相机写成已经完成机器人实测。下一次板端联调先运行官方 `live_record_display`，再运行 `dg_hvs_bridge`，比较两者的 APS 计数和错误日志。
 
-## 当前实机证据
+## 历史只读证据（2026-09-11）
 
 地瓜派专用任务已保存以下只读证据：
 
@@ -176,7 +185,7 @@ bash probe_rdk_x5_event_camera.sh
 - `rdk_x5_apx003cc_mapping_conclusion_20260911.txt`：物理 CAM1 → 软件 cam0 的结论；
 - `sidecar_v3_probe_rdk_x5_event_camera_20260911_214655.txt`：新版侧车包、TROS、用户态库和厂商工具探测结果。
 
-这些证据证明了资源存在和映射关系，尚未证明 overlay 已启用或实时事件流已经输出。
+这些历史证据证明了资源存在和映射关系；其‘尚未证明实时事件流’的结论已由2026-09-13的厂商实时样例和RDK真实采集证据更新，但不替代跨板业务接收验收。
 
 ## 第五步：采集一段真实事件数据
 
@@ -225,7 +234,7 @@ python3 inspect_event_topic.py --timeout-sec 10 --output-json event_topic_probe.
 - `MEASURED_REPLAY_PASS`：真实采集数据已成功回放；
 - `LIVE_HARDWARE_PASS`：真实相机持续输出并经 ROS 2 实时处理。
 
-当前状态是 `SOFTWARE_READY`，尚未达到后两项。
+当前状态已达到`SOFTWARE_READY`、RDK本地`LIVE_HARDWARE_PASS`和`CROSS_BOARD_RECEIVE_PASS`；真实数据回放仍可单独标记`MEASURED_REPLAY_PASS`。`/dg/auxiliary/transport_quality`仍需新版监视器部署，机器人实机消费尚未验收。
 
 ## 参考资料
 

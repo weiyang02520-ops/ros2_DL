@@ -2,7 +2,7 @@
 
 **用途**：给现场人员按顺序执行的命令模板。命令分为只读检查、观察模式和用户实机动作；不能把前两类结果当作实机运动或精度指标。
 
-**当前基线**：本地开发分支已有带提交号的发布包，机器人当前仍是旧部署 `c75d48e`。部署新包前只做检查和回放，不打开底盘电源、不发送 `/cmd_vel`。
+**当前基线**：本地开发分支当前HEAD为`318d9510b7ab0b8ad3c181d01b842f57e0ca03e0`，已有绑定该提交的发布包；机器人当前仍是旧部署`c75d48e`。RDK HBN目标架构已编译通过并已形成真实事件相机采集证据，NVIDIA跨板业务接收已通过；`/dg/auxiliary/transport_quality`仍待新版监视器部署。部署新包前只做检查和回放，不打开底盘电源、不发送`/cmd_vel`。
 
 ## 1. 两板环境记录（只读）
 
@@ -40,20 +40,22 @@ ps -ef | grep -E '[e]vs|[h]vs|[d]g_hvs|[a]px003cc' || true
 
 ## 3. DDS 基础链路（无运动）
 
-两板都设置 ROS 环境后，在 RDK 发布一次诊断消息：
+两板都设置 ROS 环境后，先在接收端启动命令，再在发布端发送一次诊断消息，避免`--once`在发布前结束。
+
+NVIDIA先接收：
+
+```bash
+timeout 15 ros2 topic echo /dg/link_test --once
+```
+
+随后在RDK发布：
 
 ```bash
 ros2 topic pub --once /dg/link_test std_msgs/msg/String \
   "{data: 'rdk_to_jetson_20260913'}"
 ```
 
-在 NVIDIA 接收：
-
-```bash
-timeout 15 ros2 topic echo /dg/link_test --once
-```
-
-再反向执行：NVIDIA 发布 `jetson_to_rdk_20260913`，RDK 接收。两向都收到才记录 `DDS_LINK_TEST_PASS`；这只证明发现和网络，不证明事件业务数据已经到达。
+反向测试同样先在RDK启动接收，再由NVIDIA发布`jetson_to_rdk_20260913`。两向都收到才记录`DDS_LINK_TEST_PASS`；这只证明发现和网络，不证明事件业务数据已经到达。
 
 ## 4. NVIDIA 观察模式安全检查（只读）
 
@@ -73,9 +75,13 @@ ros2 topic info /imu/data -v
 enable_nav2:=false
 enable_cmd_vel_arbiter:=false
 enable_uwb_replay:=false
+enable_hybrid_vision_assist:=true
+enable_auxiliary_transport_monitor:=true
+enable_mmwave_observation:=true
 enable_mmwave_dynamic_mask:=false
 ```
 
+第一轮只启动观察侧链；不启用主动恢复运动、不启用毫米波动态掩码，也不让新节点发布`/cmd_vel`。
 启动后只检查状态，不发送控制：
 
 ```bash
@@ -88,16 +94,28 @@ timeout 15 ros2 topic echo /dg/relocalization/status --once
 
 ## 5. 事件相机业务话题
 
-RDK HBN 桥确认运行后，在 NVIDIA 端执行：
+RDK HBN 桥确认运行后，先在RDK运行时显式加载Toolkit库，再在NVIDIA端执行：
+
+RDK运行环境：
+
+```bash
+export HV_TOOLKIT_ROOT=$HOME/shimetapi_hybrid_vision_toolkit
+export AMENT_PREFIX_PATH=$HOME/dg202611_hvs_ws/install:${AMENT_PREFIX_PATH:-}
+export LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRARY_PATH:-}"
+```
+
+NVIDIA接收检查：
 
 ```bash
 timeout 15 ros2 topic echo /dg/event_camera/quality --once
 timeout 15 ros2 topic echo /dg/event_camera/features --once
+timeout 15 ros2 topic echo /dg/event_camera/feature_quality --once
+timeout 15 ros2 topic echo /dg/event_camera/assist_quality --once
 timeout 15 ros2 topic echo /dg/event_camera/camera_info --once
 timeout 15 ros2 topic echo /dg/auxiliary/transport_quality --once
 ```
 
-通过条件：quality 不是 `UNSEEN`、features 和 CameraInfo 有消息、transport quality 的消息年龄可计算。`timeout` 退出码 `124` 表示在限定时间内没有收到消息，应记录为 `PENDING`，不能填写 PASS。
+通过条件：quality不是`UNSEEN`，features、feature_quality、assist_quality和CameraInfo有消息，且NVIDIA端持续收到业务话题。2026-09-13已形成`CROSS_BOARD_RECEIVE_PASS`：quality=`GOOD`、feature_quality=`COMPARED`、features约9.2–9.9 Hz，详见`evidence/cross_board/20260913/nvidia_receive.txt`及其SHA-256清单。`/dg/auxiliary/transport_quality`属于新版传输监视器验收项，监视器尚未部署前保持`PENDING`，不填写其新鲜度或延迟结论。`timeout`退出码`124`表示在限定时间内没有收到消息，应记录为`PENDING`，不能填写PASS。
 
 ## 6. UWB 回放（无底盘运动）
 
