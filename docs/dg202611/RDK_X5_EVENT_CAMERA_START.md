@@ -187,6 +187,26 @@ bash probe_rdk_x5_event_camera.sh
 
 这些历史证据证明了资源存在和映射关系；其‘尚未证明实时事件流’的结论已由2026-09-13的厂商实时样例和RDK真实采集证据更新，但不替代跨板业务接收验收。
 
+## 三路画面采集命令
+
+在已确认桥接二进制和 HBN 配置可用的 RDK 上，可以运行：
+
+```bash
+source /opt/tros/humble/setup.bash
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+run_three_view_capture.sh 30
+```
+
+默认保存 EVS 事件活动图 `/dg/event_camera/motion_mask`、APS 压缩图 `/dg/event_camera/aps/image_raw/compressed` 和融合压缩图 `/dg/event_camera/fused/image/compressed`。需要同时保存 EVS 原始事件和 APS/fused 文件时，使用：
+
+```bash
+DG_HVS_RECORD_RAW=true run_three_view_capture.sh 30
+```
+
+脚本只启动事件相机桥和 rosbag，不启动底盘、不启动 Nav2，也不发布 `/cmd_vel`。结束后检查 `SESSION.txt`、`bridge.log`、`rosbag.log` 和 `manifest.sha256`；质量话题应显示 `state=GOOD`、`pair_valid=true` 且 `fused_frames` 增长。
 ## 第五步：采集一段真实事件数据
 
 设备正常识别且适配固件验证通过后，先在厂商示例目录编译实时采集程序。教程中的 `evs_live_player.RAW8` 是 Makefile 的目标文件，源码包不一定预先带有这个二进制：

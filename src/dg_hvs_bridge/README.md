@@ -29,6 +29,16 @@ export LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRAR
 `recording_enabled:=true` 时在 RDK 本地保存 RAW8、EVT2、事件 CSV、APS PGM、融合 JPEG、配置和运行统计。结束后使用 `run_hvs_capture_session.sh` 生成 SHA-256 清单。
 
 
+
+## 三路画面采集
+
+若只需要查看和回放 EVS、APS 以及 EVS+APS 融合画面，可使用 `run_three_view_capture.sh`。脚本启动同一 HVS 桥，并用 rosbag 保存：
+
+- `/dg/event_camera/motion_mask`：EVS 事件活动画面；
+- `/dg/event_camera/aps/image_raw/compressed`：APS 压缩画面；
+- `/dg/event_camera/fused/image/compressed`：EVS+APS 融合画面。
+
+默认采集 30 秒，输出到 `$HOME/dg202611_hvs_bags/three_views_<UTC>`，并记录环境、命令和 SHA-256 清单。设置 `DG_HVS_RECORD_RAW=true` 会额外保存 RAW8、EVT2、事件 CSV、APS PGM 和融合 JPEG。脚本不会启动底盘、Nav2 或发布 `/cmd_vel`。
 ## features 话题
 
 参数文件默认启用桥接内置的 `/dg/event_camera/features` 发布器。它使用与现有 `event_feature_node` 相同的 PointCloud2 字段：`pixel_x`、`pixel_y`、`event_count`、`positive_fraction`。内置聚合同时按 `feature_min_events_per_cell` 和 `feature_min_unique_pixels` 过滤，避免单个热像素重复触发被当作特征。桥接还会为每个特征包发布 `/dg/event_camera/feature_quality`（`DiagnosticArray`），其中包含 `feature_count`、`event_count`、按候选特征聚合的 `unique_pixel_count`、`repeatability_status`、`repeatability`、`frame_id`、`observation_only=true` 和 `publishes_cmd_vel=false`。重复性使用相邻包的一对一像素距离匹配，距离阈值由 `feature_match_distance_px` 控制；首包为 `NO_PREVIOUS_PACKET`，已有前一包但任一包无特征时为 `ZERO_FEATURE_PAIR`，只有两包都有特征才为 `COMPARED`。如果仍运行 `run_rdk_event_feature_sidecar.sh`，请把桥接参数 `publish_features` 设为 `false`，避免两个节点同时发布 `/dg/event_camera/features` 和 `/dg/event_camera/feature_quality`；sidecar 仅用于桥接内置特征关闭时的替代路径。
