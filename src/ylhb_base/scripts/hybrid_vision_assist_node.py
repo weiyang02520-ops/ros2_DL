@@ -55,6 +55,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("assist_quality_topic", "/dg/event_camera/assist_quality")
             self.declare_parameter("expected_frame_id", "event_camera_optical_frame")
             self.declare_parameter("input_timeout_sec", 0.5)
+            self.declare_parameter("intrinsics_valid", False)
             self.declare_parameter("lidar_extrinsics_valid", False)
             self.declare_parameter("motion_compensation_ready", False)
             self.declare_parameter("max_linear_speed_for_uncompensated_mask", 0.02)
@@ -70,6 +71,9 @@ def create_node(node_name: str) -> Any:
                 ),
             )
             self._expected_frame = str(self.get_parameter("expected_frame_id").value)
+            self._intrinsics_declared_valid = bool(
+                self.get_parameter("intrinsics_valid").value
+            )
             self._lidar_extrinsics_valid = bool(
                 self.get_parameter("lidar_extrinsics_valid").value
             )
@@ -179,7 +183,9 @@ def create_node(node_name: str) -> Any:
                     camera_state=self._camera_state,
                     event_feature_count=self._feature_count,
                     motion_mask_active_fraction=self._mask_fraction,
-                    camera_intrinsics_valid=self._intrinsics_valid,
+                    camera_intrinsics_valid=(
+                        self._intrinsics_declared_valid and self._intrinsics_valid
+                    ),
                     lidar_extrinsics_valid=self._lidar_extrinsics_valid,
                     motion_compensation_ready=self._motion_compensation_ready,
                     robot_linear_speed=self._linear_speed,
@@ -207,6 +213,7 @@ def create_node(node_name: str) -> Any:
                 "mask_fresh": decision.mask_fresh,
                 "event_feature_count": self._feature_count,
                 "motion_mask_active_fraction": self._mask_fraction,
+                "camera_intrinsics_declared_valid": self._intrinsics_declared_valid,
                 "camera_intrinsics_valid": self._intrinsics_valid,
                 "lidar_extrinsics_valid": self._lidar_extrinsics_valid,
                 "motion_compensation_ready": self._motion_compensation_ready,

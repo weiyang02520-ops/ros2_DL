@@ -36,6 +36,7 @@ def event(**changes: object) -> NavigationHealthInput:
         amcl_fresh=True,
         odom_fresh=True,
         scan_fresh=True,
+        imu_fresh=True,
         scan_match_state="GOOD",
         scan_match_fresh=True,
         relocalization_state="NORMAL",
@@ -144,6 +145,15 @@ class NavigationHealthCoreTests(unittest.TestCase):
             event(gnss_state=None, gnss_fresh=None, lidar_state=None, lidar_fresh=None, scan_match_state=None, scan_match_fresh=None)
         )
         self.assertEqual(output.overall_state, NOMINAL)
+
+    def test_missing_base_inputs_never_report_nominal(self) -> None:
+        output = NavigationHealthAggregator().evaluate(
+            event(odom_fresh=None, scan_fresh=None, imu_fresh=None)
+        )
+        self.assertEqual(output.overall_state, LOCALIZATION_SUSPECT)
+        self.assertIn("ODOM_MISSING", output.reasons)
+        self.assertIn("SCAN_MISSING", output.reasons)
+        self.assertIn("IMU_MISSING", output.reasons)
 
     def test_required_stale_signal_is_a_strong_reason(self) -> None:
         output = NavigationHealthAggregator().evaluate(event(gnss_fresh=False, required_signals=("gnss",)))

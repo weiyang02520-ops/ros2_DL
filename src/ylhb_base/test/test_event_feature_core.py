@@ -126,3 +126,19 @@ def test_hybrid_assist_honors_calibration_static_idle_and_fault_boundaries() -> 
     )
     assert moving_uncompensated.reason == "SELF_MOTION_COMPENSATION_REQUIRED"
     assert not moving_uncompensated.may_modify_lidar
+
+
+def test_hybrid_assist_requires_declared_and_observed_camera_intrinsics() -> None:
+    node = (SCRIPTS / "hybrid_vision_assist_node.py").read_text(encoding="utf-8")
+    launch = (SCRIPTS.parent / "launch" / "dg_navigation_integration.launch.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'self.declare_parameter("intrinsics_valid", False)' in node
+    assert "self._intrinsics_declared_valid and self._intrinsics_valid" in node
+    assert '"intrinsics_valid": ParameterValue(event_camera_intrinsics_valid' in launch
+    assert (
+        'DeclareLaunchArgument(\n'
+        '                "event_camera_intrinsics_valid",\n'
+        '                default_value="false",'
+    ) in launch

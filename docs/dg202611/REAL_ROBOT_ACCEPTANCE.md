@@ -13,6 +13,8 @@ hostname
 ip -br addr
 printenv ROS_DOMAIN_ID ROS_LOCALHOST_ONLY RMW_IMPLEMENTATION
 ros2 doctor --report
+date -Is
+timedatectl status
 ```
 
 记录：
@@ -21,6 +23,9 @@ ros2 doctor --report
 日期时间：
 NVIDIA地址：
 RDK地址：
+NVIDIA系统时间：
+RDK系统时间：
+两板时钟是否已同步：
 Git提交号：
 ROS_DOMAIN_ID：
 RMW_IMPLEMENTATION：
@@ -36,10 +41,15 @@ RDK端先确认：
 whoami
 pwd
 echo "$HOME"
+date -Is
+timedatectl status
 ls -ld /app/multimedia_samples/sample_apx003cc 2>/dev/null || true
+ls -l /dev/video* /dev/media* /dev/v4l-subdev* 2>&1 || true
 ```
 
 使用当前用户目录进行30至60秒长测，确认：
+
+只有设备节点存在且两板时间正确后，才开始本次长测和跨板延迟记录。
 
 ```text
 EVS持续有数据

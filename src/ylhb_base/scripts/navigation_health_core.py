@@ -50,6 +50,7 @@ class NavigationHealthInput:
     amcl_fresh: bool | None = None
     odom_fresh: bool | None = None
     scan_fresh: bool | None = None
+    imu_fresh: bool | None = None
     scan_match_state: str | None = None
     scan_match_fresh: bool | None = None
     relocalization_state: str | None = None
@@ -208,10 +209,15 @@ class NavigationHealthAggregator:
                     reasons.append(f"{name}_REQUIRED_STALE")
         if amcl in {REJECTED, STALE}:
             reasons.append(f"AMCL_{amcl}")
-        if event.odom_fresh is False:
-            reasons.append("ODOM_STALE")
-        if event.scan_fresh is False:
-            reasons.append("SCAN_STALE")
+        for name, fresh in (
+            ("ODOM", event.odom_fresh),
+            ("SCAN", event.scan_fresh),
+            ("IMU", event.imu_fresh),
+        ):
+            if fresh is None:
+                reasons.append(f"{name}_MISSING")
+            elif fresh is False:
+                reasons.append(f"{name}_STALE")
         if event.amcl_fresh is False and "AMCL_STALE" not in reasons:
             reasons.append("AMCL_STALE")
         if relocalization == STALE:
@@ -227,6 +233,14 @@ class NavigationHealthAggregator:
         localization_unhealthy = (
             relocalization in {LOCALIZATION_SUSPECT, STALE}
             or amcl in {REJECTED, STALE}
+            or (
+                relocalization != RECOVERED
+                and (
+                    event.odom_fresh is not True
+                    or event.scan_fresh is not True
+                    or event.imu_fresh is not True
+                )
+            )
             or any(
                 state == STALE and name in required
                 for name, state in required_states.items()
@@ -251,6 +265,7 @@ class NavigationHealthAggregator:
                 amcl == GOOD
                 and event.odom_fresh is True
                 and event.scan_fresh is True
+                and event.imu_fresh is True
                 and all(required_states.get(name, UNKNOWN) == GOOD for name in required)
             )
             if not ready:

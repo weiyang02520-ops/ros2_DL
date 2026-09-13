@@ -219,6 +219,7 @@ def generate_launch_description():
         parameters=[
             {
                 "camera_quality_topic": "/dg/event_camera/quality",
+                "intrinsics_valid": ParameterValue(event_camera_intrinsics_valid, value_type=bool),
                 "event_features_topic": "/dg/event_camera/features",
                 "motion_mask_topic": "/dg/event_camera/motion_mask",
                 "camera_info_topic": "/dg/event_camera/camera_info",
@@ -294,6 +295,7 @@ def generate_launch_description():
             {
                 "scan_topic": "/dg/lidar/filtered_scan",
                 "odom_topic": "/odom",
+                "imu_topic": "/imu/data",
                 "amcl_pose_topic": "/amcl_pose",
                 "lidar_quality_topic": "/dg/lidar/quality",
                 "gnss_quality_topic": "/dg/gnss/quality",
@@ -317,6 +319,9 @@ def generate_launch_description():
             {
                 "required_signals": required_signals,
                 "uwb_quality_topic": "/dg/uwb/quality",
+                "odom_topic": "/odom",
+                "scan_topic": "/scan",
+                "imu_topic": "/imu/data",
                 "status_topic": "/dg/navigation/status",
                 "post_recovery_stable_sec": ParameterValue(
                     post_recovery_stable_sec, value_type=float

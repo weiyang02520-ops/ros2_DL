@@ -37,6 +37,7 @@ class LocalizationHealth:
     scan_match_mean_distance: float | None = None
     scan_fresh: bool | None = None
     odom_fresh: bool | None = None
+    imu_fresh: bool | None = None
     amcl_fresh: bool | None = None
     lidar_fresh: bool | None = None
     gnss_fresh: bool | None = None
@@ -46,6 +47,25 @@ class LocalizationHealth:
     pose_x: float | None = None
     pose_y: float | None = None
     pose_yaw: float | None = None
+
+
+def recovery_motion_gate(
+    recovery_motion_armed: bool, health: LocalizationHealth | None
+) -> tuple[bool, str]:
+    """Return whether a non-zero recovery command is safe to publish.
+
+    The active-relocalization state machine may continue observing and producing
+    a proposed command while the robot is unarmed.  The ROS node must enforce
+    this final actuator gate so an observation-only launch cannot move the base.
+    """
+    if not recovery_motion_armed:
+        return False, "RECOVERY_MOTION_NOT_ARMED"
+    if health is None:
+        return False, "HEALTH_MISSING"
+    for name in ("scan_fresh", "odom_fresh", "imu_fresh"):
+        if getattr(health, name) is not True:
+            return False, f"{name.upper()}_NOT_FRESH"
+    return True, ""
 
 
 @dataclass(frozen=True)

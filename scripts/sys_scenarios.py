@@ -38,7 +38,8 @@ def uwb_bad(t):
 
 def health_input(t, gnss="GOOD", lidar="GOOD", uwb="GOOD"):
     return NavigationHealthInput(t, gnss_state=gnss, gnss_fresh=True, lidar_state=lidar, lidar_fresh=True,
-                                  amcl_state=lidar, amcl_fresh=True, uwb_state=uwb, uwb_fresh=True)
+                                  amcl_state=lidar, amcl_fresh=True, odom_fresh=True, scan_fresh=True,
+                                  imu_fresh=True, uwb_state=uwb, uwb_fresh=True)
 
 def test_sys_01():
     print("\n=== SYS_01: NOMINAL ===")

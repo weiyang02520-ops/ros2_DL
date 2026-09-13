@@ -25,6 +25,7 @@ from active_relocalization_core import (  # noqa: E402
     LocalizationHealth,
     SupervisorInput,
     assess_health,
+    recovery_motion_gate,
 )
 from active_relocalization_node import parse_match_quality_values, parse_required_signals  # noqa: E402
 
@@ -40,6 +41,7 @@ def healthy(**changes: object) -> LocalizationHealth:
         scan_match_mean_distance=0.05,
         scan_fresh=True,
         odom_fresh=True,
+        imu_fresh=True,
         amcl_fresh=True,
         odom_linear_velocity=0.0,
         odom_angular_velocity=0.0,
@@ -71,6 +73,22 @@ def config(**changes: object) -> ActiveRelocalizationConfig:
     )
     values.update(changes)
     return ActiveRelocalizationConfig(**values)
+
+
+class RecoveryMotionGateTests(unittest.TestCase):
+    def test_unarmed_always_blocks_nonzero_motion(self) -> None:
+        allowed, reason = recovery_motion_gate(False, healthy())
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "RECOVERY_MOTION_NOT_ARMED")
+
+    def test_missing_or_stale_required_sensor_blocks_motion(self) -> None:
+        for field in ("scan_fresh", "odom_fresh", "imu_fresh"):
+            allowed, reason = recovery_motion_gate(True, healthy(**{field: None}))
+            self.assertFalse(allowed)
+            self.assertEqual(reason, f"{field.upper()}_NOT_FRESH")
+
+    def test_armed_with_all_required_sensor_streams_allows_motion(self) -> None:
+        self.assertEqual(recovery_motion_gate(True, healthy()), (True, ""))
 
 
 class ActiveRelocalizationCoreTests(unittest.TestCase):

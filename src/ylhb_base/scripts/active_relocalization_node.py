@@ -27,6 +27,7 @@ from active_relocalization_core import (  # noqa: E402
     CandidateQuality,
     LocalizationHealth,
     SupervisorInput,
+    recovery_motion_gate,
 )
 from pose_freshness import motion_aware_pose_fresh  # noqa: E402
 from mission_activity import (  # noqa: E402
@@ -150,7 +151,7 @@ def create_node(node_name: str) -> Any:
     from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
-    from sensor_msgs.msg import LaserScan
+    from sensor_msgs.msg import Imu, LaserScan
     from std_msgs.msg import Bool, String
 
     class ActiveRelocalizationNode(Node):
@@ -173,6 +174,7 @@ def create_node(node_name: str) -> Any:
             self._scan_sequence = 0
             self._consumed_scan_sequence = 0
             self._odom_received_at: float | None = None
+            self._imu_received_at: float | None = None
             self._odom_pose: tuple[float, float, float] | None = None
             self._odom_yaw: float | None = None
             self._odom_linear = 0.0
@@ -194,6 +196,7 @@ def create_node(node_name: str) -> Any:
             self._scan_match_mean_distance: float | None = None
             self._match_quality_received_at: float | None = None
             self._manual_takeover = False
+            self._last_motion_gate_reason = ""
 
             self._cmd_pub = self.create_publisher(Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
             self._seed_pub = self.create_publisher(
@@ -207,6 +210,9 @@ def create_node(node_name: str) -> Any:
             )
             self.create_subscription(
                 Odometry, str(self.get_parameter("odom_topic").value), self._on_odom, 10
+            )
+            self.create_subscription(
+                Imu, str(self.get_parameter("imu_topic").value), self._on_imu, 10
             )
             self.create_subscription(
                 PoseWithCovarianceStamped,
@@ -255,6 +261,7 @@ def create_node(node_name: str) -> Any:
             defaults = {
                 "scan_topic": "/scan",
                 "odom_topic": "/odom",
+                "imu_topic": "/imu/data",
                 "amcl_pose_topic": "/amcl_pose",
                 "lidar_quality_topic": "/dg/lidar/quality",
                 "gnss_quality_topic": "/dg/gnss/quality",
@@ -362,6 +369,9 @@ def create_node(node_name: str) -> Any:
             if self._amcl_received_at is not None and self._amcl_reference_odom_pose is None:
                 self._amcl_reference_odom_pose = self._odom_pose
 
+        def _on_imu(self, _message: Any) -> None:
+            self._imu_received_at = self._now()
+
         def _on_amcl_pose(self, message: Any) -> None:
             self._amcl_received_at = self._now()
             self._amcl_reference_odom_pose = self._odom_pose
@@ -442,6 +452,7 @@ def create_node(node_name: str) -> Any:
             self._scan_sequence = 0
             self._consumed_scan_sequence = 0
             self._odom_received_at = None
+            self._imu_received_at = None
             self._odom_pose = None
             self._odom_yaw = None
             self._odom_linear = 0.0
@@ -497,6 +508,7 @@ def create_node(node_name: str) -> Any:
                 scan_match_mean_distance=self._scan_match_mean_distance,
                 scan_fresh=self._fresh(self._scan_received_at, now),
                 odom_fresh=self._fresh(self._odom_received_at, now),
+                imu_fresh=self._fresh(self._imu_received_at, now),
                 amcl_fresh=self._amcl_fresh(now),
                 lidar_fresh=self._fresh(self._lidar_health_received_at, now),
                 gnss_fresh=self._fresh(self._gnss_health_received_at, now),
@@ -544,7 +556,19 @@ def create_node(node_name: str) -> Any:
             output = self._controller.process(event)
             if output.failure_reason:
                 self._last_failure_reason = str(output.failure_reason)
-            self._publish_command(output.command_linear_x, output.command_angular_z)
+            command_is_nonzero = (
+                abs(float(output.command_linear_x)) > 1e-9
+                or abs(float(output.command_angular_z)) > 1e-9
+            )
+            allowed, gate_reason = recovery_motion_gate(
+                bool(self.get_parameter("recovery_motion_armed").value), event.health
+            )
+            if command_is_nonzero and not allowed:
+                self._last_motion_gate_reason = gate_reason
+                self._publish_zero()
+            else:
+                self._last_motion_gate_reason = ""
+                self._publish_command(output.command_linear_x, output.command_angular_z)
             if output.request_candidate:
                 self._publish_seed(output.seed_pose)
             self._publish_status(output, now, activity)
@@ -598,6 +622,7 @@ def create_node(node_name: str) -> Any:
                 "last_terminal_state": activity.terminal_state,
                 "last_failure_reason": self._last_failure_reason,
                 "recovery_motion_armed": bool(self.get_parameter("recovery_motion_armed").value),
+                "motion_gate_reason": self._last_motion_gate_reason,
                 "command_angular_z": 0.0,
                 "timestamp": now,
             }
@@ -636,7 +661,8 @@ def create_node(node_name: str) -> Any:
                 "candidate_request_time": output.candidate_request_time,
                 "seed_source": output.seed_source,
                 "seed_pose": output.seed_pose,
-                "command_angular_z": output.command_angular_z,
+                "command_angular_z": output.command_angular_z if not self._last_motion_gate_reason else 0.0,
+                "requested_command_angular_z": output.command_angular_z,
                 "health_reasons": ";".join(output.health_reasons),
                 "mission_phase": activity.phase,
                 "mission_active": activity.mission_active,
@@ -646,6 +672,7 @@ def create_node(node_name: str) -> Any:
                 "last_terminal_state": activity.terminal_state,
                 "last_failure_reason": self._last_failure_reason,
                 "recovery_motion_armed": bool(self.get_parameter("recovery_motion_armed").value),
+                "motion_gate_reason": self._last_motion_gate_reason,
                 "timestamp": now,
             }
             status.values = [KeyValue(key=str(key), value="" if value is None else str(value)) for key, value in fields.items()]

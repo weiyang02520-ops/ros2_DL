@@ -139,7 +139,9 @@ def test_inspection_launch_keeps_ui_as_full_stack_lifecycle_anchor():
     assert "respawn=True" not in launch
     assert "DeclareLaunchArgument('default_navigation_map'" in launch
     assert "'default_navigation_map': default_navigation_map" in launch
-    assert 'run_on_jetson.sh" inspection' in autostart
+    assert '"${BASE_RUNNER}" inspection' in autostart
+    assert 'mobile_bridge_managed_externally:=true' in autostart
+    assert 'auto_start_mobile_bridge:=false' in autostart
     assert "crash-loop limit" in autostart
     assert "onClosing: function(close)" in qml
     assert "close.accepted = false" in qml
@@ -187,6 +189,7 @@ def test_intentional_shutdown_marker_stops_restart_but_crashes_still_recover(tmp
     env = os.environ.copy()
     env.update({
         "PATH": os.pathsep.join((str(fake_bin), env["PATH"])),
+        "DG_BASE_WS": str(workspace),
         "XDG_RUNTIME_DIR": str(runtime),
         "YLHB_UI_INHIBIT_IDLE": "false",
         "YLHB_INSPECTION_AUTO_RESTART": "true",
@@ -236,6 +239,7 @@ def test_autostart_permanent_preflight_error_does_not_enter_restart_loop(tmp_pat
         env={
             **os.environ,
             'PATH': os.pathsep.join((str(fake_bin), os.environ['PATH'])),
+            'DG_BASE_WS': str(workspace),
             'YLHB_UI_INHIBIT_IDLE': 'false',
         },
         text=True,

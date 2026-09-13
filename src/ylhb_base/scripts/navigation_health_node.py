@@ -67,7 +67,7 @@ def create_node(node_name: str) -> Any:
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
-    from sensor_msgs.msg import LaserScan
+    from sensor_msgs.msg import Imu, LaserScan
     from std_msgs.msg import String
 
     class NavigationHealthNode(Node):
@@ -81,6 +81,7 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("amcl_pose_topic", "/amcl_pose")
             self.declare_parameter("odom_topic", "/odom")
             self.declare_parameter("scan_topic", "/scan")
+            self.declare_parameter("imu_topic", "/imu/data")
             self.declare_parameter("status_topic", "/dg/navigation/status")
             self.declare_parameter("system_status_topic", "/inspection_ai/system_status")
             self.declare_parameter("mission_gate_enabled", False)
@@ -126,6 +127,7 @@ def create_node(node_name: str) -> Any:
             self._odom_received_at: float | None = None
             self._odom_pose: tuple[float, float, float] | None = None
             self._scan_received_at: float | None = None
+            self._imu_received_at: float | None = None
 
             self._status_pub = self.create_publisher(
                 DiagnosticArray, str(self.get_parameter("status_topic").value), 10
@@ -170,6 +172,12 @@ def create_node(node_name: str) -> Any:
                 LaserScan,
                 str(self.get_parameter("scan_topic").value),
                 self._on_scan,
+                qos_profile_sensor_data,
+            )
+            self.create_subscription(
+                Imu,
+                str(self.get_parameter("imu_topic").value),
+                self._on_imu,
                 qos_profile_sensor_data,
             )
             if self._mission_gate_enabled:
@@ -254,6 +262,9 @@ def create_node(node_name: str) -> Any:
         def _on_scan(self, _message: Any) -> None:
             self._scan_received_at = self._now()
 
+        def _on_imu(self, _message: Any) -> None:
+            self._imu_received_at = self._now()
+
         def _on_system_status(self, message: Any) -> None:
             try:
                 payload = json.loads(str(message.data))
@@ -292,6 +303,7 @@ def create_node(node_name: str) -> Any:
             self._odom_received_at = None
             self._odom_pose = None
             self._scan_received_at = None
+            self._imu_received_at = None
 
         def _mission_activity(self, now: float) -> MissionActivity:
             if not self._mission_gate_enabled:
@@ -329,6 +341,7 @@ def create_node(node_name: str) -> Any:
                     amcl_fresh=self._amcl_fresh(now),
                     odom_fresh=self._fresh(self._odom_received_at, now),
                     scan_fresh=self._fresh(self._scan_received_at, now),
+                    imu_fresh=self._fresh(self._imu_received_at, now),
                     scan_match_state=self._scan_match_state,
                     scan_match_fresh=self._fresh(self._scan_match_received_at, now),
                     relocalization_state=self._relocalization_state,
@@ -402,6 +415,9 @@ def create_node(node_name: str) -> Any:
                 "scan_match_state": output.scan_match_state,
                 "relocalization_state": output.relocalization_state,
                 "uwb_state": output.uwb_state,
+                "odom_fresh": self._fresh(self._odom_received_at, output.timestamp),
+                "scan_fresh": self._fresh(self._scan_received_at, output.timestamp),
+                "imu_fresh": self._fresh(self._imu_received_at, output.timestamp),
                 "overall_state": output.overall_state,
                 "post_recovery_elapsed": output.post_recovery_elapsed,
                 "post_recovery_required": output.post_recovery_required,

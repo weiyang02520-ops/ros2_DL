@@ -202,13 +202,18 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertNotIn("ros2 topic pub", runner)
         self.assertNotIn("/home/nvidia/ros2_DL/src", installer)
 
-    def test_dg_inspection_uses_base_assets_with_the_versioned_overlay(self) -> None:
+    def test_dg_inspection_uses_base_ui_and_single_bridge_owner(self) -> None:
         runner = DG_INSPECTION_RUNNER.read_text(encoding="utf-8")
         jetson = (REPOSITORY_ROOT / "scripts" / "run_on_jetson.sh").read_text(encoding="utf-8")
         preflight = PREFLIGHT.read_text(encoding="utf-8")
         self.assertIn('export WS_DIR="${base_ws}"', runner)
-        self.assertIn('export YLHB_OVERLAY_WS="${integration_ws}"', runner)
-        self.assertIn("Refusing to start a second inspection UI/Supervisor stack", runner)
+        self.assertIn('export DG_INTEGRATION_WS="${integration_ws}"', runner)
+        self.assertIn('base_runner="${base_ws}/scripts/run_on_jetson.sh"', runner)
+        self.assertIn('base_ui="${base_ws}/install/ylhb_llm/lib/ylhb_llm/inspection_display_ui_node"', runner)
+        self.assertIn("拒绝启动第二套 inspection UI/Supervisor", runner)
+        self.assertIn("mobile_bridge_managed_externally:=true", runner)
+        self.assertIn("auto_start_mobile_bridge:=false", runner)
+        self.assertNotIn('export YLHB_OVERLAY_WS="${integration_ws}"', runner)
         self.assertIn('source_ros_setup "${OVERLAY_WS_DIR}/install/setup.bash"', jetson)
         self.assertIn("--packages-select ylhb_base ylhb_llm", preflight)
         self.assertNotIn("topic pub", runner)

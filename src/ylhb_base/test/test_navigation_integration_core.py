@@ -22,6 +22,7 @@ def health(**changes: object) -> NavigationHealthInput:
         amcl_fresh=True,
         odom_fresh=True,
         scan_fresh=True,
+        imu_fresh=True,
         scan_match_state="GOOD",
         scan_match_fresh=True,
         relocalization_state="NORMAL",

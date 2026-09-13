@@ -102,6 +102,8 @@ def test_uwb_single_source_failure_does_not_trigger_model3():
         uwb_state="REJECTED",
         uwb_fresh=True,
         odom_fresh=True,
+        scan_fresh=True,
+        imu_fresh=True,
     )
     health_output = health.evaluate(health_input)
 
@@ -122,9 +124,6 @@ def test_uwb_single_source_failure_does_not_trigger_model3():
     print(f"   - System continues operating: {health_output.overall_state}")
     print(f"   - No MODEL-3 triggered")
 
-    return True
-
-
 def test_uwb_not_required_signal():
     """Verify UWB is not a hard-required signal by default."""
     print("\n" + "="*70)
@@ -143,6 +142,8 @@ def test_uwb_not_required_signal():
         uwb_state="STALE",
         uwb_fresh=False,
         odom_fresh=True,
+        scan_fresh=True,
+        imu_fresh=True,
         required_signals=(),  # Empty - UWB not required
     )
     health_output = health.evaluate(health_input)
@@ -154,9 +155,6 @@ def test_uwb_not_required_signal():
     print(f"   Overall state: {health_output.overall_state}")
     print(f"   UWB not required: system continues normally")
     print(f"✅ PASS: UWB is not a hard-required signal")
-
-    return True
-
 
 def test_gnss_lidar_healthy_uwb_failed():
     """Multiple healthy sources mask UWB failure."""
@@ -179,6 +177,7 @@ def test_gnss_lidar_healthy_uwb_failed():
         uwb_fresh=True,
         odom_fresh=True,
         scan_fresh=True,
+        imu_fresh=True,
     )
     health_output = health.evaluate(health_input)
 
@@ -192,9 +191,6 @@ def test_gnss_lidar_healthy_uwb_failed():
     print(f"   UWB: {health_output.uwb_state}")
     print(f"   Reasons: {health_output.reasons}")
     print(f"✅ PASS: System healthy despite UWB failure")
-
-    return True
-
 
 if __name__ == "__main__":
     print("\n" + "="*70)
@@ -210,8 +206,8 @@ if __name__ == "__main__":
     results = {}
     for test_func in tests:
         try:
-            passed = test_func()
-            results[test_func.__name__] = "PASS" if passed else "FAIL"
+            test_func()
+            results[test_func.__name__] = "PASS"
         except AssertionError as e:
             print(f"❌ FAIL: {test_func.__name__}")
             print(f"   Error: {e}")
