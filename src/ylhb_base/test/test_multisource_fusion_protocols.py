@@ -82,6 +82,23 @@ class MultisourceFusionProtocolTests(unittest.TestCase):
             bridge,
         )
 
+    def test_hvs_bridge_publishes_feature_quality_with_repeatability_gate(self) -> None:
+        bridge_root = ROOT.parents[1] / "src" / "dg_hvs_bridge"
+        bridge = (bridge_root / "src" / "dg_hvs_bridge_node.cpp").read_text(encoding="utf-8")
+        config = (bridge_root / "config" / "rdk_x5_apx003cc.yaml").read_text(encoding="utf-8")
+        readme = (bridge_root / "README.md").read_text(encoding="utf-8")
+        self.assertIn('"/dg/event_camera/feature_quality"', bridge)
+        self.assertIn('"feature_min_unique_pixels"', bridge)
+        self.assertIn('"feature_match_distance_px"', bridge)
+        self.assertIn('"repeatability_status"', bridge)
+        self.assertIn('"unique_pixel_count"', bridge)
+        self.assertIn('"observation_only", "true"', bridge)
+        self.assertIn('"publishes_cmd_vel", "false"', bridge)
+        self.assertIn("feature_min_unique_pixels: 3", config)
+        self.assertIn("feature_match_distance_px: 12.0", config)
+        self.assertIn("ZERO_FEATURE_PAIR", readme)
+        self.assertIn("NO_PREVIOUS_PACKET", readme)
+
     def test_transport_monitor_exposes_auditable_timing_fields(self) -> None:
         import auxiliary_transport_monitor_node as monitor
 

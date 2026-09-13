@@ -31,7 +31,7 @@ export LD_LIBRARY_PATH="$HV_TOOLKIT_ROOT/lib/x5:/opt/tros/humble/lib:${LD_LIBRAR
 
 ## features 话题
 
-参数文件默认启用桥接内置的 `/dg/event_camera/features` 发布器。它使用与现有 `event_feature_node` 相同的 PointCloud2 字段：`pixel_x`、`pixel_y`、`event_count`、`positive_fraction`。如果仍运行 `run_rdk_event_feature_sidecar.sh`，请把桥接参数 `publish_features` 设为 `false`，避免两个节点同时发布同一 features 话题；需要相邻包重复率时使用 sidecar 的 `feature_quality` 诊断。
+参数文件默认启用桥接内置的 `/dg/event_camera/features` 发布器。它使用与现有 `event_feature_node` 相同的 PointCloud2 字段：`pixel_x`、`pixel_y`、`event_count`、`positive_fraction`。内置聚合同时按 `feature_min_events_per_cell` 和 `feature_min_unique_pixels` 过滤，避免单个热像素重复触发被当作特征。桥接还会为每个特征包发布 `/dg/event_camera/feature_quality`（`DiagnosticArray`），其中包含 `feature_count`、`event_count`、按候选特征聚合的 `unique_pixel_count`、`repeatability_status`、`repeatability`、`frame_id`、`observation_only=true` 和 `publishes_cmd_vel=false`。重复性使用相邻包的一对一像素距离匹配，距离阈值由 `feature_match_distance_px` 控制；首包为 `NO_PREVIOUS_PACKET`，已有前一包但任一包无特征时为 `ZERO_FEATURE_PAIR`，只有两包都有特征才为 `COMPARED`。如果仍运行 `run_rdk_event_feature_sidecar.sh`，请把桥接参数 `publish_features` 设为 `false`，避免两个节点同时发布 `/dg/event_camera/features` 和 `/dg/event_camera/feature_quality`；sidecar 仅用于桥接内置特征关闭时的替代路径。
 
 
 ## 当前 RDK 实测状态（2026-09-12）

@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -39,6 +40,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -133,7 +135,9 @@ public:
     declare_parameter<bool>("publish_features", false);
     declare_parameter<int>("feature_cell_px", 12);
     declare_parameter<int>("feature_min_events_per_cell", 5);
+    declare_parameter<int>("feature_min_unique_pixels", 3);
     declare_parameter<int>("feature_max_features", 512);
+    declare_parameter<double>("feature_match_distance_px", 12.0);
     declare_parameter<bool>("afk_filter_enabled", false);
     declare_parameter<bool>("recording_enabled", false);
     declare_parameter<std::string>("record_directory", default_record_directory());
@@ -170,6 +174,8 @@ public:
     if (publish_features_) {
       features_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
         "/dg/event_camera/features", sensor_qos);
+      feature_quality_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+        "/dg/event_camera/feature_quality", 10);
     }
 
     quality_timer_ = create_wall_timer(1s, std::bind(&DgHvsBridge::publish_quality, this));
@@ -288,7 +294,9 @@ private:
     publish_features_ = get_parameter("publish_features").as_bool();
     feature_cell_px_ = get_parameter("feature_cell_px").as_int();
     feature_min_events_per_cell_ = get_parameter("feature_min_events_per_cell").as_int();
+    feature_min_unique_pixels_ = get_parameter("feature_min_unique_pixels").as_int();
     feature_max_features_ = get_parameter("feature_max_features").as_int();
+    feature_match_distance_px_ = get_parameter("feature_match_distance_px").as_double();
     afk_filter_enabled_ = get_parameter("afk_filter_enabled").as_bool();
     recording_enabled_ = get_parameter("recording_enabled").as_bool();
     record_directory_ = get_parameter("record_directory").as_string();
@@ -319,6 +327,8 @@ private:
       event_publish_rate_hz_ <= 0.0 || preview_publish_rate_hz_ <= 0.0 ||
       max_events_per_message_ <= 0 || max_events_per_second_ <= 0 ||
       feature_cell_px_ <= 0 || feature_min_events_per_cell_ <= 0 || feature_max_features_ <= 0 ||
+      feature_min_unique_pixels_ <= 0 || !std::isfinite(feature_match_distance_px_) ||
+      feature_match_distance_px_ <= 0.0 ||
       denoise_cell_px_ <= 0 || denoise_min_events_per_cell_ <= 0 ||
       record_aps_every_n_ <= 0 || jpeg_quality_ < 1 || jpeg_quality_ > 100 ||
       event_decay_ < 0.0 || event_decay_ > 1.0)
@@ -414,6 +424,10 @@ private:
                 << "i2c_bus=" << i2c_bus_ << "\n"
                 << "evs_fps=" << evs_fps_ << "\n"
                 << "publish_features=" << bool_text(publish_features_) << "\n"
+                << "feature_cell_px=" << feature_cell_px_ << "\n"
+                << "feature_min_events_per_cell=" << feature_min_events_per_cell_ << "\n"
+                << "feature_min_unique_pixels=" << feature_min_unique_pixels_ << "\n"
+                << "feature_match_distance_px=" << feature_match_distance_px_ << "\n"
                 << "event_geometry=" << event_width_ << "x" << event_height_ << "\n"
                 << "aps_fallback_geometry=" << aps_width_ << "x" << aps_height_ << "\n"
                 << "pair_tolerance_ms=" << pair_tolerance_ms_ << "\n"
@@ -765,14 +779,87 @@ private:
     pair_valid_ = std::isfinite(best_skew_ms) && best_skew_ms <= pair_tolerance_ms_;
   }
 
+  struct FeaturePoint
+  {
+    double x{0.0};
+    double y{0.0};
+  };
+
+  struct FeatureQualitySnapshot
+  {
+    size_t event_count{0};
+    size_t unique_pixel_count{0};
+    std::vector<FeaturePoint> points;
+    std::string repeatability_status{"NO_PREVIOUS_PACKET"};
+    double repeatability{std::numeric_limits<double>::quiet_NaN()};
+  };
+
+  static size_t one_to_one_match_count(
+    const std::vector<FeaturePoint> & previous,
+    const std::vector<FeaturePoint> & current,
+    double match_distance_px)
+  {
+    const double limit_squared = match_distance_px * match_distance_px;
+    std::vector<std::vector<size_t>> adjacency(previous.size());
+    for (size_t previous_index = 0; previous_index < previous.size(); ++previous_index) {
+      std::vector<std::pair<double, size_t>> matches;
+      for (size_t current_index = 0; current_index < current.size(); ++current_index) {
+        const double dx = previous[previous_index].x - current[current_index].x;
+        const double dy = previous[previous_index].y - current[current_index].y;
+        const double distance_squared = dx * dx + dy * dy;
+        if (distance_squared <= limit_squared) {
+          matches.emplace_back(distance_squared, current_index);
+        }
+      }
+      std::stable_sort(matches.begin(), matches.end(), [](const auto & lhs, const auto & rhs) {
+        if (lhs.first != rhs.first) {
+          return lhs.first < rhs.first;
+        }
+        return lhs.second < rhs.second;
+      });
+      adjacency[previous_index].reserve(matches.size());
+      for (const auto & match : matches) {
+        adjacency[previous_index].push_back(match.second);
+      }
+    }
+
+    std::vector<int> matched_current(current.size(), -1);
+    std::function<bool(size_t, std::vector<bool> &)> augment =
+      [&](size_t previous_index, std::vector<bool> & seen) {
+        for (const size_t current_index : adjacency[previous_index]) {
+          if (seen[current_index]) {
+            continue;
+          }
+          seen[current_index] = true;
+          const int displaced = matched_current[current_index];
+          if (displaced < 0 || augment(static_cast<size_t>(displaced), seen)) {
+            matched_current[current_index] = static_cast<int>(previous_index);
+            return true;
+          }
+        }
+        return false;
+      };
+
+    size_t matches = 0;
+    for (size_t previous_index = 0; previous_index < previous.size(); ++previous_index) {
+      std::vector<bool> seen(current.size(), false);
+      if (augment(previous_index, seen)) {
+        ++matches;
+      }
+    }
+    return matches;
+  }
+
   sensor_msgs::msg::PointCloud2 make_feature_cloud(
-    const std::vector<Shimeta::EventCD> & events, const rclcpp::Time & stamp)
+    const std::vector<Shimeta::EventCD> & events, const rclcpp::Time & stamp,
+    FeatureQualitySnapshot & snapshot)
   {
     struct Accumulator {
       uint32_t count{0};
       uint32_t positive{0};
       double sum_x{0.0};
       double sum_y{0.0};
+      std::unordered_set<uint64_t> unique_pixels;
     };
     const int cells_x = (event_width_ + feature_cell_px_ - 1) / feature_cell_px_;
     const int cells_y = (event_height_ + feature_cell_px_ - 1) / feature_cell_px_;
@@ -786,16 +873,24 @@ private:
       cell.positive += event.polarity ? 1U : 0U;
       cell.sum_x += event.x;
       cell.sum_y += event.y;
+      const uint64_t pixel = (static_cast<uint64_t>(event.y) << 32U) |
+        static_cast<uint64_t>(event.x);
+      cell.unique_pixels.insert(pixel);
     }
-    struct Candidate { int index; Accumulator value; };
+    struct Candidate { int index; const Accumulator * value; };
     std::vector<Candidate> candidates;
     for (int index = 0; index < static_cast<int>(cells.size()); ++index) {
-      if (cells[index].count >= static_cast<uint32_t>(feature_min_events_per_cell_)) {
-        candidates.push_back({index, cells[index]});
+      if (cells[index].count >= static_cast<uint32_t>(feature_min_events_per_cell_) &&
+        cells[index].unique_pixels.size() >= static_cast<size_t>(feature_min_unique_pixels_))
+      {
+        candidates.push_back({index, &cells[index]});
       }
     }
     std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate & lhs, const Candidate & rhs) {
-      if (lhs.value.count != rhs.value.count) return lhs.value.count > rhs.value.count;
+      if (lhs.value->count != rhs.value->count) return lhs.value->count > rhs.value->count;
+      if (lhs.value->unique_pixels.size() != rhs.value->unique_pixels.size()) {
+        return lhs.value->unique_pixels.size() > rhs.value->unique_pixels.size();
+      }
       return lhs.index < rhs.index;
     });
     if (candidates.size() > static_cast<size_t>(feature_max_features_)) {
@@ -828,8 +923,12 @@ private:
     cloud.row_step = cloud.point_step * cloud.width;
     cloud.is_dense = true;
     cloud.data.resize(cloud.row_step);
+    snapshot.event_count = events.size();
+    snapshot.unique_pixel_count = 0;
+    snapshot.points.clear();
+    snapshot.points.reserve(candidates.size());
     for (size_t index = 0; index < candidates.size(); ++index) {
-      const auto & value = candidates[index].value;
+      const auto & value = *candidates[index].value;
       const float x = static_cast<float>(value.sum_x / value.count);
       const float y = static_cast<float>(value.sum_y / value.count);
       const float count = static_cast<float>(value.count);
@@ -839,9 +938,65 @@ private:
       append_scalar(cloud.data, offset + 4, y);
       append_scalar(cloud.data, offset + 8, count);
       append_scalar(cloud.data, offset + 12, positive_fraction);
+      snapshot.points.push_back({x, y});
+      snapshot.unique_pixel_count += value.unique_pixels.size();
     }
+    if (!feature_previous_packet_seen_) {
+      snapshot.repeatability_status = "NO_PREVIOUS_PACKET";
+    } else if (previous_feature_points_.empty() || snapshot.points.empty()) {
+      snapshot.repeatability_status = "ZERO_FEATURE_PAIR";
+    } else {
+      const size_t matches = one_to_one_match_count(
+        previous_feature_points_, snapshot.points, feature_match_distance_px_);
+      snapshot.repeatability = 2.0 * static_cast<double>(matches) /
+        static_cast<double>(previous_feature_points_.size() + snapshot.points.size());
+      snapshot.repeatability_status = "COMPARED";
+    }
+    previous_feature_points_ = snapshot.points;
+    feature_previous_packet_seen_ = true;
+    feature_packet_count_.fetch_add(1);
     feature_count_.store(candidates.size());
     return cloud;
+  }
+
+  void publish_feature_quality(
+    const FeatureQualitySnapshot & snapshot, const rclcpp::Time & stamp)
+  {
+    if (!feature_quality_pub_) {
+      return;
+    }
+    diagnostic_msgs::msg::DiagnosticArray array;
+    array.header.stamp = stamp;
+    array.header.frame_id = frame_id_;
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "dg/event_camera/feature_quality";
+    status.hardware_id = camera_name_;
+    status.message = snapshot.repeatability_status;
+    status.level = snapshot.repeatability_status == "COMPARED" && !snapshot.points.empty() ?
+      diagnostic_msgs::msg::DiagnosticStatus::OK : diagnostic_msgs::msg::DiagnosticStatus::WARN;
+    const auto add = [&](const std::string & key, const std::string & value) {
+        diagnostic_msgs::msg::KeyValue item;
+        item.key = key;
+        item.value = value;
+        status.values.push_back(std::move(item));
+      };
+    const bool quality_good = snapshot.repeatability_status == "COMPARED" &&
+      std::isfinite(snapshot.repeatability) && !snapshot.points.empty();
+    add("state", quality_good ? "GOOD" : "DEGRADED");
+    add("quality", quality_good ? "GOOD" : "DEGRADED");
+    add("repeatability_status", snapshot.repeatability_status);
+    add("repeatability", std::isfinite(snapshot.repeatability) ?
+      std::to_string(snapshot.repeatability) : "nan");
+    add("feature_count", std::to_string(snapshot.points.size()));
+    add("event_count", std::to_string(snapshot.event_count));
+    add("unique_pixel_count", std::to_string(snapshot.unique_pixel_count));
+    add("feature_match_distance_px", std::to_string(feature_match_distance_px_));
+    add("feature_packets", std::to_string(feature_packet_count_.load()));
+    add("frame_id", frame_id_);
+    add("observation_only", "true");
+    add("publishes_cmd_vel", "false");
+    array.status.push_back(std::move(status));
+    feature_quality_pub_->publish(array);
   }
 
   void publish_events_if_due(
@@ -903,7 +1058,9 @@ private:
     }
     events_pub_->publish(cloud);
     if (features_pub_) {
-      features_pub_->publish(make_feature_cloud(events, stamp));
+      FeatureQualitySnapshot snapshot;
+      features_pub_->publish(make_feature_cloud(events, stamp, snapshot));
+      publish_feature_quality(snapshot, stamp);
     }
     published_event_count_.fetch_add(output_count);
   }
@@ -1151,6 +1308,9 @@ private:
     add("rate_limited_packets", std::to_string(rate_limited_event_count_.load()));
     add("features_enabled", bool_text(publish_features_));
     add("feature_count", std::to_string(feature_count_.load()));
+    add("feature_min_unique_pixels", std::to_string(feature_min_unique_pixels_));
+    add("feature_match_distance_px", std::to_string(feature_match_distance_px_));
+    add("feature_packets", std::to_string(feature_packet_count_.load()));
     add("unsupported_aps_frames", std::to_string(unsupported_aps_format_count_.load()));
     add("recording_enabled", bool_text(recording_enabled_));
     add("afk_filter_enabled", "false");
@@ -1175,6 +1335,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr mask_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr quality_pub_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr feature_quality_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr features_pub_;
 
   std::string device_node_;
@@ -1206,7 +1367,9 @@ private:
   bool publish_features_{false};
   int feature_cell_px_{};
   int feature_min_events_per_cell_{};
+  int feature_min_unique_pixels_{};
   int feature_max_features_{};
+  double feature_match_distance_px_{};
   bool afk_filter_enabled_{};
   bool recording_enabled_{};
   std::string record_directory_;
@@ -1261,7 +1424,10 @@ private:
   std::atomic<uint64_t> skipped_fused_frame_count_{0};
   std::atomic<uint64_t> dropped_event_messages_{0};
   std::atomic<uint64_t> rate_limited_event_count_{0};
+  std::atomic<uint64_t> feature_packet_count_{0};
   mutable std::atomic<uint64_t> unsupported_aps_format_count_{0};
+  std::vector<FeaturePoint> previous_feature_points_;
+  bool feature_previous_packet_seen_{false};
   int last_aps_frame_id_{0};
   int64_t last_aps_ts_ns_{0};
   int last_aps_width_{0};

@@ -27,7 +27,9 @@ dg_hvs_bridge_node:
     publish_features: true
     feature_cell_px: 12
     feature_min_events_per_cell: 5
+    feature_min_unique_pixels: 3
     feature_max_features: 512
+    feature_match_distance_px: 12.0
     afk_filter_enabled: false
     recording_enabled: false
     # Empty means use $HOME/dg202611_rdk_records in the bridge process.

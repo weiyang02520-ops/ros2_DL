@@ -180,6 +180,10 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertIn("/home/nvidia/ros2_DL was not changed", activator)
         self.assertIn("Get-FileHash", deployer)
         self.assertIn("Test-NetConnection", deployer)
+        self.assertIn("Cannot infer the commit from archive name", deployer)
+        self.assertIn("does not match archive filename commit", deployer)
+        self.assertIn("staging_dir", installer)
+        self.assertIn("source_root", installer)
         for text in (installer, deployer, activator):
             self.assertNotIn("/home/nvidia/ros2_DL/src", text)
             self.assertNotIn("topic pub", text)

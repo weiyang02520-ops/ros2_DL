@@ -17,10 +17,24 @@ param(
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $workspaceRoot = Split-Path -Parent $repositoryRoot
+$archivePathProvided = -not [string]::IsNullOrWhiteSpace($ArchivePath)
 if (-not $Commit) {
-    $Commit = (& git -C $repositoryRoot rev-parse --short HEAD).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Unable to read the integration commit id.'
+    if ($archivePathProvided) {
+        $archiveLeaf = [IO.Path]::GetFileName($ArchivePath)
+        $archiveCommit = $null
+        if ($archiveLeaf -match '^(?:dg202611_ws|dg202611_robot_integration)_([0-9a-f]{7,40})\.tar\.gz$') {
+            $archiveCommit = $Matches[1]
+        }
+        if (-not $archiveCommit) {
+            throw "Cannot infer the commit from archive name '$archiveLeaf'. Pass -Commit explicitly."
+        }
+        $Commit = $archiveCommit
+    }
+    else {
+        $Commit = (& git -C $repositoryRoot rev-parse --short HEAD).Trim()
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to read the integration commit id.'
+        }
     }
 }
 if ($Commit -notmatch '^[0-9a-f]{7,40}$') {
@@ -40,6 +54,14 @@ if (-not $ArchivePath) {
     } | Select-Object -First 1
     if (-not $ArchivePath) {
         throw "No release archive found for commit $Commit. Expected one of: $($archiveCandidates -join ', ')"
+    }
+}
+$archiveLeaf = [IO.Path]::GetFileName($ArchivePath)
+if ($archivePathProvided -and $archiveLeaf -match '^(?:dg202611_ws|dg202611_robot_integration)_([0-9a-f]{7,40})\.tar\.gz$') {
+    $archiveCommit = $Matches[1]
+    $commitMatchesArchive = ($archiveCommit -eq $Commit) -or $archiveCommit.StartsWith($Commit) -or $Commit.StartsWith($archiveCommit)
+    if (-not $commitMatchesArchive) {
+        throw "Commit '$Commit' does not match archive filename commit '$archiveCommit'."
     }
 }
 $archive = (Resolve-Path -LiteralPath $ArchivePath).Path
