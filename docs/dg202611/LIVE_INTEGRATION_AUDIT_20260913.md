@@ -4,14 +4,14 @@
 
 ## 版本与边界
 
-- 本地开发分支：`codex/dg-robot-integration`；当前代码 HEAD：`7f1409f`；阶段性证据基线提交：`4f3ffb4`。本审计记录对应阶段性提交时的现场快照。
+- 本地开发分支：`codex/dg-robot-integration`；当前代码 HEAD：`0a5ad6b`；阶段性证据基线提交：`4f3ffb4`。本审计记录对应阶段性提交时的现场快照。
 - 最终发布包、补丁和源码SHA-256清单按最终本地提交的短 SHA 绑定；`4f3ffb4`仅作为已归档的阶段性证据提交。
 - 本次核验区分三层事实：RDK目标架构编译、两板DDS基础发现、RDK本地真实采集/业务话题发布。编译通过和基础DDS通过均不能替代NVIDIA业务接收或机器人实机闭环。
 
 ## NVIDIA机器人
 
 - 机器人网络和SSH正常，当前无线地址为`192.168.43.12`。
-- 本次审计时的部署软链指向`/home/nvidia/dg202611_ws_c75d48e`，部署记录中的提交为`c75d48e`；这是现场历史快照，不是当前 HEAD`7f1409f`。本地集成分支尚未部署，基础工作区未被本次本地开发修改。
+- 本次审计时的部署软链指向`/home/nvidia/dg202611_ws_c75d48e`，部署记录中的提交为`c75d48e`；这是现场历史快照，不是当前 HEAD`0a5ad6b`。本地集成分支尚未部署，基础工作区未被本次本地开发修改。
 - `dg202611-models.service`和`ylhb-mobile-bridge.service`处于运行状态并已设为开机启动；三模型当前保持观察模式，Nav2、速度仲裁器和UWB实时回放关闭，`recovery_motion_armed=false`。
 - `/scan`、`/odom`、`/imu/data`当时没有发布者，ZLAC、RPLidar、IMU和EKF底层进程没有启动；`/cmd_vel`存在UI/命令节点发布端，但没有底盘订阅端。本次没有发送运动指令。
 - 三模型状态为`STANDBY/INITIALIZING`，原因是巡检任务未激活且底层传感器输入不存在。
