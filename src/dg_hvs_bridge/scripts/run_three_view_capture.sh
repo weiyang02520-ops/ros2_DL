@@ -96,17 +96,20 @@ bag_status=0
 stop_child() {
   local pid="$1"
   local label="$2"
+  local status=0
   [[ -n "$pid" ]] || return 0
   if kill -0 "$pid" 2>/dev/null; then
     echo "Stopping $label (pid=$pid)"
     kill -INT "$pid" 2>/dev/null || true
-    set +e
-    wait "$pid"
-    local status=$?
-    set -e
-    echo "$label_exit=$status"
-    return 0
   fi
+  # Always wait for the child so the evidence records its real exit status,
+  # including an early failure that happened before the stop request.
+  set +e
+  wait "$pid"
+  status=$?
+  set -e
+  echo "${label}_exit=$status"
+  return "$status"
 }
 
 cleanup() {
@@ -161,9 +164,15 @@ ros2 bag record \
 bag_pid=$!
 
 sleep "$duration_sec"
+set +e
 stop_child "$bag_pid" "rosbag"
+bag_status=$?
+set -e
 bag_pid=""
+set +e
 stop_child "$bridge_pid" "bridge"
+bridge_status=$?
+set -e
 bridge_pid=""
 
 find "$session_dir" -type f ! -name manifest.sha256 -print0 \
