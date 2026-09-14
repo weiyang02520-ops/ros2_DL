@@ -17,7 +17,7 @@ setup(
         ("share/" + package_name + "/docs", glob("docs/*.md")),
         ("share/" + package_name + "/rviz", glob("rviz/*.rviz")),
     ],
-    install_requires=["setuptools", "PyYAML"],
+    install_requires=["setuptools", "PyYAML", "numpy"],
     zip_safe=True,
     maintainer="liaojingwu20041031",
     maintainer_email="206929594+liaojingwu20041031@users.noreply.github.com",
