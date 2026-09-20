@@ -272,7 +272,7 @@ def create_node(node_name: str) -> Any:
                 "seed_topic": "/dg/relocalization/seed",
                 "seed_frame_id": "map",
                 "manual_topic": "/dg/relocalization/manual_takeover",
-                "cmd_vel_topic": "/cmd_vel",
+                "cmd_vel_topic": "/cmd_vel_recovery",
                 "status_topic": "/dg/relocalization/status",
                 "system_status_topic": "/inspection_ai/system_status",
                 "mission_gate_enabled": False,

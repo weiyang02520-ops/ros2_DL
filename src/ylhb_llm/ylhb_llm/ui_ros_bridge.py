@@ -9,7 +9,7 @@ from geometry_msgs.msg import Twist
 from PyQt5.QtCore import QObject, pyqtSignal
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool, Trigger
 from ylhb_mobile_bridge.patrol_qos import patrol_status_qos_profile
 
@@ -91,7 +91,8 @@ class InspectionDisplayRosBridge(Node):
             'dg_navigation_status_topic': '/dg/navigation/status',
             'mapping3d_status_topic': '/inspection_ai/mapping3d_status',
             'mapping3d_result_topic': '/inspection_ai/mapping3d_result',
-            'cmd_vel_topic': '/cmd_vel',
+            'cmd_vel_topic': '/cmd_vel_manual',
+            'manual_authorization_topic': '/dg/control/manual_authorized',
             'initial_system_mode': 'ready',
             'fullscreen': True,
             'display': ':0',
@@ -110,6 +111,9 @@ class InspectionDisplayRosBridge(Node):
         self.system_command_pub = self.create_publisher(String, self._param('system_command_topic'), 10)
         self.patrol_command_pub = self.create_publisher(String, self._param('patrol_command_topic'), 10)
         self.cmd_vel_pub = self.create_publisher(Twist, self._param('cmd_vel_topic'), 10)
+        self.manual_authorization_pub = self.create_publisher(
+            Bool, self._param('manual_authorization_topic'), 10
+        )
         self.local_confirm_ui_status_pub = self.create_publisher(
             String, self._param('local_confirm_ui_status_topic'), latched_qos()
         )
@@ -316,6 +320,9 @@ class InspectionDisplayRosBridge(Node):
         msg = Twist()
         msg.linear.x = float(linear)
         msg.angular.z = float(angular)
+        authorization = Bool()
+        authorization.data = bool(linear or angular)
+        self.manual_authorization_pub.publish(authorization)
         self.cmd_vel_pub.publish(msg)
 
     def call_voice_service(self, name: str) -> None:

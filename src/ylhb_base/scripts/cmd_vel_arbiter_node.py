@@ -16,7 +16,7 @@ from cmd_vel_arbiter_core import ArbiterConfig, ArbiterInput, CmdVelArbiter, Twi
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Arbitrate navigation and recovery velocity commands.")
+    parser = argparse.ArgumentParser(description="Arbitrate manual, navigation and recovery velocity commands.")
     parser.add_argument("--node-name", default="cmd_vel_arbiter_node", help="ROS node name")
     return parser
 
@@ -35,6 +35,8 @@ def create_node(node_name: str) -> Any:
             self.declare_parameter("output_topic", "/cmd_vel")
             self.declare_parameter("navigation_status_topic", "/dg/navigation/status")
             self.declare_parameter("manual_topic", "/dg/relocalization/manual_takeover")
+            self.declare_parameter("manual_command_topic", "/cmd_vel_manual")
+            self.declare_parameter("manual_authorization_topic", "/dg/control/manual_authorized")
             self.declare_parameter("source_timeout", 0.5)
             self.declare_parameter("switch_guard_duration", 0.2)
             self.declare_parameter("status_timeout", 1.0)
@@ -51,6 +53,9 @@ def create_node(node_name: str) -> Any:
             self._nav_received_at: float | None = None
             self._recovery_cmd: TwistCommand | None = None
             self._recovery_received_at: float | None = None
+            self._manual_cmd: TwistCommand | None = None
+            self._manual_received_at: float | None = None
+            self._manual_authorized = False
             self._navigation_state = "DEGRADED"
             self._navigation_status_received_at: float | None = None
             self._manual_takeover = False
@@ -72,6 +77,18 @@ def create_node(node_name: str) -> Any:
             self.create_subscription(
                 Bool, str(self.get_parameter("manual_topic").value), self._on_manual, 10
             )
+            self.create_subscription(
+                Twist,
+                str(self.get_parameter("manual_command_topic").value),
+                self._on_manual_command,
+                10,
+            )
+            self.create_subscription(
+                Bool,
+                str(self.get_parameter("manual_authorization_topic").value),
+                self._on_manual_authorization,
+                10,
+            )
             self._timer = self.create_timer(float(self.get_parameter("timer_period").value), self._tick)
             self.get_logger().info("DG command arbiter active; only this node publishes the integration /cmd_vel")
 
@@ -85,6 +102,17 @@ def create_node(node_name: str) -> Any:
         def _on_recovery(self, message: Any) -> None:
             self._recovery_cmd = TwistCommand(float(message.linear.x), float(message.angular.z))
             self._recovery_received_at = self._now()
+
+        def _on_manual_command(self, message: Any) -> None:
+            self._manual_cmd = TwistCommand(float(message.linear.x), float(message.angular.z))
+            self._manual_received_at = self._now()
+
+        def _on_manual_authorization(self, message: Any) -> None:
+            self._manual_authorized = bool(message.data)
+            if not self._manual_authorized:
+                self._manual_cmd = None
+                self._manual_received_at = None
+                self._publish_zero()
 
         def _on_navigation_status(self, message: Any) -> None:
             selected = None
@@ -115,6 +143,9 @@ def create_node(node_name: str) -> Any:
                     navigation_received_at=self._nav_received_at,
                     recovery_command=self._recovery_cmd,
                     recovery_received_at=self._recovery_received_at,
+                    manual_command=self._manual_cmd,
+                    manual_received_at=self._manual_received_at,
+                    manual_authorized=self._manual_authorized,
                     navigation_state=self._navigation_state,
                     manual_takeover=self._manual_takeover,
                     navigation_status_received_at=self._navigation_status_received_at,

@@ -344,6 +344,8 @@ def generate_launch_description():
             {
                 "navigation_topic": "/cmd_vel_nav",
                 "recovery_topic": "/cmd_vel_recovery",
+                "manual_command_topic": "/cmd_vel_manual",
+                "manual_authorization_topic": "/dg/control/manual_authorized",
                 "output_topic": cmd_vel_output_topic,
                 "navigation_status_topic": "/dg/navigation/status",
             }

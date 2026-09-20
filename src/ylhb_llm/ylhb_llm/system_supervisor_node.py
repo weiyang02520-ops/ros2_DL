@@ -24,7 +24,7 @@ from sensor_msgs.msg import LaserScan
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rclpy.time import Time
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import Empty
 from ylhb_mobile_bridge.patrol_qos import patrol_status_qos_profile
 from ylhb_mobile_bridge.patrol_route_store import (
@@ -264,7 +264,8 @@ class SystemSupervisorNode(Node):
         self.declare_parameter('system_command_topic', '/inspection_ai/system_command')
         self.declare_parameter('system_status_topic', '/inspection_ai/system_status')
         self.declare_parameter('system_mode_topic', '/inspection_ai/system_mode')
-        self.declare_parameter('cmd_vel_topic', '/cmd_vel')
+        self.declare_parameter('cmd_vel_topic', '/cmd_vel_manual')
+        self.declare_parameter('manual_authorization_topic', '/dg/control/manual_authorized')
         # The supervisor must gate bringup success on the actual ZLAC state.
         # /odom and /scan can remain alive while the CANopen controller is
         # offline, which otherwise makes a failed chassis start look healthy.
@@ -499,6 +500,8 @@ class SystemSupervisorNode(Node):
             String, self.get_parameter('system_mode_topic').value, latched_qos())
         self.cmd_vel_pub = self.create_publisher(
             Twist, self.get_parameter('cmd_vel_topic').value, 10)
+        self.manual_authorized_pub = self.create_publisher(
+            Bool, self.get_parameter('manual_authorization_topic').value, 10)
         self.patrol_command_pub = self.create_publisher(String, '/patrol/command', 10)
         self.mapping3d_command_pub = self.create_publisher(String, '/inspection_ai/mapping3d_capture_command', 10)
         self.scene_asset_ready_pub = self.create_publisher(
@@ -1399,6 +1402,9 @@ class SystemSupervisorNode(Node):
             return False
 
     def publish_zero_velocity(self) -> None:
+        authorization = Bool()
+        authorization.data = False
+        self.manual_authorized_pub.publish(authorization)
         self.cmd_vel_pub.publish(Twist())
 
     def start_robot_stack(self) -> None:

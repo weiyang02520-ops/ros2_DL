@@ -10,6 +10,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from cmd_vel_arbiter_core import (  # noqa: E402
     NAV,
+    MANUAL,
     NONE,
     RECOVERY,
     ArbiterConfig,
@@ -25,6 +26,10 @@ def nav_cmd() -> TwistCommand:
 
 def recovery_cmd() -> TwistCommand:
     return TwistCommand(0.0, 0.2)
+
+
+def manual_cmd() -> TwistCommand:
+    return TwistCommand(0.12, -0.1)
 
 
 def event(
@@ -124,6 +129,48 @@ class CmdVelArbiterTests(unittest.TestCase):
         arbiter.process(event(0.0, nav=nav_cmd()))
         output = arbiter.process(event(1.0, "RECOVERING", nav=nav_cmd(), recovery=recovery_cmd(), recovery_at=1.0, manual=True))
         self.assertEqual(output.source, NONE)
+
+    def test_authorized_manual_command_has_priority_over_navigation(self) -> None:
+        arbiter = CmdVelArbiter(ArbiterConfig(switch_guard_duration=0.0))
+        arbiter.process(
+            ArbiterInput(
+                now=1.0,
+                navigation_command=nav_cmd(),
+                navigation_received_at=1.0,
+                navigation_status_received_at=1.0,
+                manual_command=manual_cmd(),
+                manual_received_at=1.0,
+                manual_authorized=True,
+            )
+        )
+        output = arbiter.process(
+            ArbiterInput(
+                now=1.1,
+                navigation_command=nav_cmd(),
+                navigation_received_at=1.1,
+                navigation_status_received_at=1.1,
+                manual_command=manual_cmd(),
+                manual_received_at=1.1,
+                manual_authorized=True,
+            )
+        )
+        self.assertEqual(output.source, MANUAL)
+        self.assertEqual(output.command, manual_cmd())
+
+    def test_authorized_manual_command_expires_to_zero(self) -> None:
+        output = CmdVelArbiter().process(
+            ArbiterInput(
+                now=1.0,
+                navigation_command=nav_cmd(),
+                navigation_received_at=1.0,
+                navigation_status_received_at=1.0,
+                manual_command=manual_cmd(),
+                manual_received_at=0.0,
+                manual_authorized=True,
+            )
+        )
+        self.assertEqual(output.command, TwistCommand())
+        self.assertEqual(output.reason, "MANUAL_SOURCE_STALE")
 
     def test_missing_navigation_health_status_is_zero(self) -> None:
         output = CmdVelArbiter().process(

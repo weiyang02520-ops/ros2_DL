@@ -248,9 +248,9 @@ class NavigationProtocolAndLaunchTests(unittest.TestCase):
         self.assertIn("*.sha256 text eol=lf", text)
         self.assertIn("LONG_RUN_TERMINAL_RECORD.md text eol=lf", text)
 
-    def test_active_relocalization_default_cmd_vel_remains_compatible(self) -> None:
+    def test_active_relocalization_default_feeds_recovery_channel(self) -> None:
         text = (SCRIPTS / "active_relocalization_node.py").read_text(encoding="utf-8")
-        self.assertIn('"cmd_vel_topic": "/cmd_vel"', text)
+        self.assertIn('"cmd_vel_topic": "/cmd_vel_recovery"', text)
 
     def test_production_integration_enables_mission_gate_but_core_defaults_stay_compatible(self) -> None:
         launch = LAUNCH.read_text(encoding="utf-8")

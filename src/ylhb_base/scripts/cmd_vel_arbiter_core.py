@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 NAV = "NAV"
 RECOVERY = "RECOVERY"
+MANUAL = "MANUAL"
 NONE = "NONE"
 
 
@@ -35,6 +36,11 @@ class ArbiterInput:
     navigation_state: str = "NOMINAL"
     manual_takeover: bool = False
     navigation_status_received_at: float | None = None
+    # Manual commands are accepted only while an explicit authorization signal
+    # is fresh.  The legacy manual_takeover flag remains a hard stop latch.
+    manual_command: TwistCommand | None = None
+    manual_received_at: float | None = None
+    manual_authorized: bool = False
 
 
 @dataclass(frozen=True)
@@ -72,6 +78,19 @@ class CmdVelArbiter:
         if event.manual_takeover:
             self._source = NONE
             return self._zero(event, "MANUAL_TAKEOVER")
+        manual_fresh = _fresh(event.manual_received_at, event.now, self.config.source_timeout)
+        manual_ok = event.manual_authorized and manual_fresh and _finite_command(event.manual_command)
+        if event.manual_authorized and not manual_ok:
+            self._source = NONE
+            return self._zero(event, "MANUAL_SOURCE_STALE")
+        if manual_ok:
+            if self._source != MANUAL:
+                self._source = MANUAL
+                self._guard_until = event.now + self.config.switch_guard_duration
+                return self._zero(event, "SOURCE_SWITCH_TO_MANUAL", guard=True)
+            if event.now < self._guard_until:
+                return self._zero(event, "SOURCE_SWITCH_GUARD", guard=True)
+            return ArbiterOutput(event.manual_command or TwistCommand(), MANUAL, "FORWARDED", False, event.now)
         if not _fresh(event.navigation_status_received_at, event.now, self.config.status_timeout):
             self._source = NONE
             return self._zero(event, "NAVIGATION_STATUS_STALE")
