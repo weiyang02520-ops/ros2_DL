@@ -183,7 +183,10 @@ def main(argv: list[str] | None = None) -> int:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        # ROS 2 may already have shut down the context from its signal handler.
+        # Avoid a second shutdown call turning a normal Ctrl-C into an error.
+        if rclpy.ok():
+            rclpy.shutdown()
     return 0
 
 
