@@ -32,6 +32,32 @@ def occupancy_grid_metadata(grid: Any) -> Dict[str, Any]:
     }
 
 
+def _occupancy_pixels(values: np.ndarray) -> np.ndarray:
+    pixels = np.full(values.shape, 205, dtype=np.uint8)
+    pixels[(values >= 0) & (values <= 25)] = 255
+    pixels[values >= 65] = 0
+    return pixels
+
+
+def _limit_image_size(image: Image.Image, max_size_px: int) -> Image.Image:
+    longest_edge = max(image.size)
+    if longest_edge > max_size_px:
+        scale = max_size_px / longest_edge
+        size = (
+            max(1, math.floor(image.width * scale)),
+            max(1, math.floor(image.height * scale)),
+        )
+        nearest = getattr(getattr(Image, 'Resampling', Image), 'NEAREST')
+        image = image.resize(size, resample=nearest)
+    return image
+
+
+def _encode_png(image: Image.Image) -> str:
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG', optimize=True)
+    return base64.b64encode(buffer.getvalue()).decode('ascii')
+
+
 def occupancy_grid_to_png_snapshot(
     grid: Any,
     downsample: int = 1,
@@ -42,27 +68,10 @@ def occupancy_grid_to_png_snapshot(
     width = int(grid.info.width)
     height = int(grid.info.height)
     values = np.asarray(grid.data, dtype=np.int16).reshape((height, width))
-
-    pixels = np.full((height, width), 205, dtype=np.uint8)
-    pixels[(values >= 0) & (values <= 25)] = 255
-    pixels[values >= 65] = 0
-    pixels = np.flipud(pixels)
-    pixels = pixels[::downsample, ::downsample]
-
+    pixels = np.flipud(_occupancy_pixels(values))[::downsample, ::downsample]
     image = Image.fromarray(pixels, mode='L').convert('RGB')
-    longest_edge = max(image.size)
-    if longest_edge > max_size_px:
-        scale = max_size_px / longest_edge
-        size = (
-            max(1, math.floor(image.width * scale)),
-            max(1, math.floor(image.height * scale)),
-        )
-        nearest = getattr(getattr(Image, 'Resampling', Image), 'NEAREST')
-        image = image.resize(size, resample=nearest)
-
-    buffer = io.BytesIO()
-    image.save(buffer, format='PNG', optimize=True)
+    image = _limit_image_size(image, max_size_px)
     return {
         'map_meta': occupancy_grid_metadata(grid),
-        'png_base64': base64.b64encode(buffer.getvalue()).decode('ascii'),
+        'png_base64': _encode_png(image),
     }

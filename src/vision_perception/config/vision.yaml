@@ -1,0 +1,26 @@
+vision_perception_node:
+  ros__parameters:
+    # Only scaffold mode exists. Unsupported settings are rejected at startup.
+    # Parameters do not implement runtime feature activation.
+    mode: skeleton
+    detector_enabled: false
+    tracking_enabled: false
+    publish_debug_image: false
+    backend: unconfigured
+    model_path: ""
+
+    # Reserved interfaces, not active subscriptions or object publishers yet.
+    # These names follow existing local ZED config; actual hardware is unverified.
+    rgb_topic: /zed/zed_node/rgb/color/rect/image
+    depth_topic: /zed/zed_node/depth/depth_registered
+    camera_info_topic: /zed/zed_node/rgb/color/rect/camera_info
+    detections_topic: /dg/vision/detections_2d
+    objects_topic: /dg/vision/objects
+    status_topic: /dg/vision/status
+    target_classes: [bottle, cup]
+
+    # Future V2 parameters; the shell does not process depth or enforce sync.
+    output_frame_policy: input_optical_header
+    sync_tolerance_sec: 0.05
+    min_depth_m: 0.2
+    max_depth_m: 8.0

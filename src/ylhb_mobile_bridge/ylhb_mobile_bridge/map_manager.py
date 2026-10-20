@@ -1,5 +1,6 @@
 import base64
 import io
+import math
 import re
 import time
 from pathlib import Path
@@ -10,6 +11,15 @@ import yaml
 
 
 MAP_NAME_PATTERN = re.compile(r'^[A-Za-z0-9_-]+$')
+
+
+def _is_finite_number(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 class MapManagerError(Exception):
@@ -58,13 +68,16 @@ class MapManager:
             issues.append('yaml_missing')
         if not pgm_present:
             issues.append('pgm_missing')
+        for kind, path in (('yaml', yaml_path), ('pgm', pgm_path)):
+            if self._present(path) and not path.is_symlink() and not path.is_file():
+                issues.append(f'{kind}_not_file')
         if (
             (yaml_present and yaml_path.is_symlink())
             or (pgm_present and pgm_path.is_symlink())
         ):
             issues.append('symlink_not_allowed')
 
-        if yaml_present and not yaml_path.is_symlink():
+        if yaml_path.is_file() and not yaml_path.is_symlink():
             try:
                 document = yaml.safe_load(
                     yaml_path.read_text(encoding='utf-8')
@@ -82,13 +95,23 @@ class MapManager:
                     issues.append('image_reference_invalid')
                 resolution = document.get('resolution')
                 origin = document.get('origin')
+                if not _is_finite_number(resolution) or resolution <= 0:
+                    issues.append('resolution_invalid')
+                    resolution = None
+                if (
+                    not isinstance(origin, list)
+                    or len(origin) != 3
+                    or not all(_is_finite_number(value) for value in origin)
+                ):
+                    issues.append('origin_invalid')
+                    origin = None
             except (OSError, UnicodeError, yaml.YAMLError, ValueError):
                 issues.append('yaml_invalid')
 
         paths = [
             path
             for path in (yaml_path, pgm_path)
-            if self._present(path) and not path.is_symlink()
+            if path.is_file() and not path.is_symlink()
         ]
         size_bytes = sum(path.stat().st_size for path in paths)
         modified_at = max(

@@ -78,6 +78,8 @@ def _spatial_match_count(
 def _pair_match_count(
     first: FrameFeatures, second: FrameFeatures, match_distance: float
 ) -> tuple[int, str]:
+    if (first.feature_points is None) != (second.feature_points is None):
+        raise ValueError("feature formats must match: spatial points and legacy IDs cannot be mixed")
     if first.feature_points is not None and second.feature_points is not None:
         if (
             first.coordinate_frame
@@ -91,6 +93,11 @@ def _pair_match_count(
     return len(set(first.feature_ids) & set(second.feature_ids)), "LEGACY_ID"
 
 
+def _validate_match_distance(match_distance: float) -> None:
+    if not math.isfinite(match_distance) or match_distance <= 0.0:
+        raise ValueError("match_distance must be finite and positive")
+
+
 def compute_frame_pair_repeatability(
     frame1: FrameFeatures, frame2: FrameFeatures, match_distance: float = 0.12
 ) -> Optional[float]:
@@ -100,6 +107,7 @@ def compute_frame_pair_repeatability(
     :func:`compute_metrics`; it is never reported as perfect repeatability.
     """
 
+    _validate_match_distance(match_distance)
     if frame1.valid_feature_count == 0 or frame2.valid_feature_count == 0:
         return None
     matched, _ = _pair_match_count(frame1, frame2, match_distance)
@@ -109,10 +117,9 @@ def compute_frame_pair_repeatability(
 def compute_metrics(
     frames: List[FrameFeatures], match_distance: float = 0.12
 ) -> Optional[RepeatabilityMetrics]:
+    _validate_match_distance(match_distance)
     if len(frames) < 2:
         return None
-    if not math.isfinite(match_distance) or match_distance <= 0.0:
-        raise ValueError("match_distance must be finite and positive")
 
     pair_values: list[float] = []
     total_features = 0

@@ -83,6 +83,10 @@ def compute_vertical_metrics(samples: List[PositionSample]) -> Optional[Position
     return _metrics_from_errors(errors)
 
 
+def _optional_csv_float(value: str) -> Optional[float]:
+    return float(value) if value else None
+
+
 def read_csv(filepath: str) -> List[PositionSample]:
     """Read position samples from CSV file.
 
@@ -102,8 +106,8 @@ def read_csv(filepath: str) -> List[PositionSample]:
                     estimated_y=float(row['estimated_y']),
                     ground_truth_x=float(row['ground_truth_x']),
                     ground_truth_y=float(row['ground_truth_y']),
-                    estimated_z=float(estimated_z) if estimated_z else None,
-                    ground_truth_z=float(ground_truth_z) if ground_truth_z else None,
+                    estimated_z=_optional_csv_float(estimated_z),
+                    ground_truth_z=_optional_csv_float(ground_truth_z),
                 )
                 samples.append(sample)
             except (KeyError, ValueError) as e:

@@ -29,6 +29,31 @@
 
 ## 项目亮点
 
+> 当前验证口径（2026-10-15）：本仓库描述目标架构及已有功能代码，不代表当前版本的每条实机链路已验收。本次仅完成本地文档梳理和离线评估修复；Jetson 构建、传感器、导航、实际运动及云端往返均未在本轮验证。
+
+### 先做不连接机器人的检查
+
+在仓库根目录、已有 pytest 的 Python 环境执行：
+
+~~~bash
+python scripts/run_offline_integration_checks.py
+~~~
+
+该入口只运行两个明确列出的离线测试文件，不启动 ROS、不连接硬件、不访问网络，也不自动安装依赖。测试使用临时样本，不生成实机通过结论。缺少 pytest 时，应先在自选虚拟环境准备依赖，不要为此改机器人基础系统。
+
+### 工程维护入口
+
+| 需要了解什么 | 文档 |
+| --- | --- |
+| 目录、模块职责、全部包声明依赖 | [仓库地图](docs/REPO_MAP.md) |
+| 架构、消息流、错误处理和配置来源 | [集成规格](docs/INTEGRATION_SPEC.md) |
+| 离线回归与现场验收 | [测试计划](docs/TEST_PLAN.md) |
+| 分层控制、配置与证据决策 | [ADR-001](docs/ADR-001.md)、[ADR-002](docs/ADR-002.md)、[ADR-003](docs/ADR-003.md) |
+| 已知问题及本轮改动 | [技术债](TECH_DEBT.md)、[变更草稿](CHANGELOG_DRAFT.md) |
+| 实际验证结果与限制 | [本轮验证记录](docs/validation/20261015_INTEGRATION_REFRESH.md) |
+
+以下功能介绍与历史演示不自动升级为本轮验收结果。
+
 <table>
   <tr>
     <td width="33%" valign="top">
@@ -60,7 +85,7 @@
   </tr>
 </table>
 
-### 已贯通的工程链路
+### 源码覆盖的工程链路（本轮实机状态未验证）
 
 ```text
 硬件接入 → TF / 里程计 / 传感器 → SLAM / AMCL / Nav2 → 路线巡逻
@@ -245,6 +270,8 @@ YLHB_SCENE_UPLOAD_ALLOWED_ROOT
 ## 快速开始
 
 运行环境：Ubuntu 22.04、ROS 2 Humble、Jetson Orin Nano Super。
+
+以下安装脚本、CAN 设置和运行入口会改变目标机环境或机器人状态，不属于前述离线检查。部署前应检查脚本、依赖和备份；实机启动及运动只能由现场操作员按安全边界执行，本轮没有执行这些步骤。
 
 ```bash
 git clone https://github.com/liaojingwu20041031/electric-power-inspection-robot.git ~/ros2_DL

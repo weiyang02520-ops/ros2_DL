@@ -1,9 +1,11 @@
 import base64
 import io
+import json
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 from PIL import Image
 
 from ylhb_mobile_bridge.map_manager import MapManager, MapManagerError
@@ -251,3 +253,68 @@ def test_names_must_be_simple_stems(tmp_path, name):
         manager.delete_map(name)
 
     assert exc.value.error == "invalid_map_name"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "issue"),
+    [
+        ("resolution", None, "resolution_invalid"),
+        ("resolution", 0, "resolution_invalid"),
+        ("resolution", -0.05, "resolution_invalid"),
+        ("resolution", True, "resolution_invalid"),
+        ("resolution", "0.05", "resolution_invalid"),
+        ("resolution", float("nan"), "resolution_invalid"),
+        ("resolution", float("inf"), "resolution_invalid"),
+        ("origin", None, "origin_invalid"),
+        ("origin", [0, 0], "origin_invalid"),
+        ("origin", [0, 0, 0, 0], "origin_invalid"),
+        ("origin", [0, False, 0], "origin_invalid"),
+        ("origin", [0, "0", 0], "origin_invalid"),
+        ("origin", [0, float("nan"), 0], "origin_invalid"),
+        ("origin", [0, 0, float("-inf")], "origin_invalid"),
+        ("origin", {"x": 0, "y": 0, "yaw": 0}, "origin_invalid"),
+    ],
+)
+def test_invalid_geometry_is_not_advertised_as_a_valid_map(
+    tmp_path, field, value, issue,
+):
+    write_map_pair(tmp_path, "factory")
+    yaml_path = tmp_path / "factory.yaml"
+    document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    document[field] = value
+    yaml_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    manager = MapManager(tmp_path / "my_map")
+
+    result = manager.list_maps()["maps"][0]
+
+    assert result["valid"] is False
+    assert issue in result["issues"]
+    assert result[field] is None
+    json.dumps(result, allow_nan=False)
+    with pytest.raises(MapManagerError) as preview_error:
+        manager.preview_map("factory")
+    assert preview_error.value.error == "invalid_map_pair"
+    with pytest.raises(MapManagerError) as selection_error:
+        manager.confirm_default("factory")
+    assert selection_error.value.error == "invalid_map_pair"
+    assert yaml_path.exists()
+    assert not (tmp_path / "my_map.yaml").exists()
+
+
+@pytest.mark.parametrize("suffix", ["yaml", "pgm"])
+def test_directories_cannot_impersonate_map_files(tmp_path, suffix):
+    write_map_pair(tmp_path, "factory")
+    invalid_path = tmp_path / f"factory.{suffix}"
+    invalid_path.unlink()
+    invalid_path.mkdir()
+    manager = MapManager(tmp_path / "my_map")
+
+    result = manager.list_maps()["maps"][0]
+
+    assert result["valid"] is False
+    assert f"{suffix}_not_file" in result["issues"]
+    with pytest.raises(MapManagerError) as rename_error:
+        manager.rename_map("factory", "new_factory")
+    assert rename_error.value.error == "invalid_map_pair"
+    assert invalid_path.is_dir()
+    assert not (tmp_path / "new_factory.yaml").exists()

@@ -41,9 +41,10 @@ def compute_metrics(events: List[RelocalizationEvent]) -> Optional[Relocalizatio
         return None
 
     total_attempts = len(events)
-    successes = sum(1 for e in events if e.outcome == "RECOVERED")
-    failures = sum(1 for e in events if e.outcome == "FAILED")
-    manual_required = sum(1 for e in events if e.outcome == "MANUAL_REQUIRED")
+    outcome_counts = Counter(event.outcome for event in events)
+    successes = outcome_counts["RECOVERED"]
+    failures = outcome_counts["FAILED"]
+    manual_required = outcome_counts["MANUAL_REQUIRED"]
 
     success_rate = successes / total_attempts if total_attempts > 0 else 0.0
 

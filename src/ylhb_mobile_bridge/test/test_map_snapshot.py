@@ -3,6 +3,7 @@ import io
 from types import SimpleNamespace
 
 from PIL import Image
+import pytest
 
 from ylhb_mobile_bridge.map_snapshot import occupancy_grid_to_png_snapshot
 
@@ -79,3 +80,32 @@ def test_occupancy_grid_snapshot_applies_max_size_px():
     )
 
     assert image.size == (4, 2)
+
+
+@pytest.mark.parametrize(
+    "downsample,max_size_px,expected_size",
+    [
+        (0, 100, (8, 4)),
+        (99, 100, (1, 1)),
+        (1, 0, (1, 1)),
+        (1, 3, (3, 1)),
+    ],
+)
+def test_snapshot_clamps_sizes_without_changing_map_metadata(
+    downsample, max_size_px, expected_size
+):
+    grid = make_grid(width=8, height=4, data=[0] * 32)
+    snapshot = occupancy_grid_to_png_snapshot(grid, downsample, max_size_px)
+
+    assert decode_png(snapshot["png_base64"]).size == expected_size
+    assert snapshot["map_meta"]["width"] == 8
+    assert snapshot["map_meta"]["height"] == 4
+    assert snapshot["map_meta"]["resolution"] == 0.05
+    assert grid.data == [0] * 32
+
+
+def test_snapshot_rejects_mismatched_grid_size_instead_of_fabricating_pixels():
+    grid = make_grid(width=3, height=3)
+
+    with pytest.raises(ValueError):
+        occupancy_grid_to_png_snapshot(grid)

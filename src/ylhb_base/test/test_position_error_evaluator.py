@@ -156,6 +156,27 @@ class TestPositionErrorEvaluator(unittest.TestCase):
         finally:
             os.unlink(temp_path)
 
+    def test_read_csv_preserves_missing_z_and_skips_invalid_z_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "positions.csv"
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow([
+                    "timestamp", "estimated_x", "estimated_y", "estimated_z",
+                    "ground_truth_x", "ground_truth_y", "ground_truth_z",
+                ])
+                writer.writerow([0, 0, 0, "  ", 0, 0, ""])
+                writer.writerow([1, 0, 0, " 0.25 ", 0, 0, " 0.20 "])
+                writer.writerow([2, 0, 0, "invalid", 0, 0, "0.20"])
+            samples = read_csv(str(path))
+
+        self.assertEqual(len(samples), 2)
+        self.assertIsNone(samples[0].estimated_z)
+        self.assertIsNone(samples[0].ground_truth_z)
+        metrics = compute_vertical_metrics(samples)
+        self.assertEqual(metrics.count, 1)
+        self.assertAlmostEqual(metrics.mean, 0.05)
+
 
 if __name__ == '__main__':
     unittest.main()
