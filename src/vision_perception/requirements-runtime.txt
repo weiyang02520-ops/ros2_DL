@@ -1,0 +1,15 @@
+# Runtime pins for vision_perception v1_ros / offline / webcam helpers.
+# Install ORDER matters: NumPy 2.x breaks many OpenCV wheels (_ARRAY_API).
+#
+#   python3 -m pip install --user -r src/vision_perception/requirements-runtime.txt
+#
+# Or step-by-step:
+#   python3 -m pip install --user 'numpy>=1.26.4,<2'
+#   python3 -m pip install --user 'opencv-python-headless==4.10.0.84'
+#   python3 -m pip install --user 'onnxruntime==1.20.1'
+#
+# Do not upgrade numpy to 2.x afterward. Weights/ONNX models are NOT listed here.
+
+numpy>=1.26.4,<2
+opencv-python-headless==4.10.0.84
+onnxruntime==1.20.1

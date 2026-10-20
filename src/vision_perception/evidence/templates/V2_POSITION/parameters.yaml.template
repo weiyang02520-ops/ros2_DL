@@ -1,0 +1,22 @@
+# Freeze before a formal V2_POSITION acceptance run. Copy into the run directory.
+stage: V2_POSITION
+mode: offline   # or v1_ros + enable_objects for ROS fake-depth smoke
+backend: onnxruntime_cpu
+enable_objects: true
+enable_tracking: false
+tracking_enabled: false
+confidence_threshold: 0.35
+nms_iou_threshold: 0.45
+mask_threshold: 0.5
+max_detections: 20
+model_input_size: 640
+sync_tolerance_sec: 0.010
+sync_wait_sec: 0.100
+min_depth_m: 0.5
+max_depth_m: 1.5
+target_classes: [bottle, cup]
+model_path: ""
+model_manifest_path: ""
+arm_ready: "NO"
+camera_contract: NOT_RUN
+orientation_valid: false

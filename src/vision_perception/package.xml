@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>vision_perception</name>
+  <version>0.1.9</version>
+  <description>
+    Independent manipulation-vision: skeleton, offline V1, optional v1_ros webcam,
+    optional V2 objects / V3 tracking when enable_objects / enable_tracking are true (v1_ros only; both default false).
+  </description>
+  <maintainer email="206929594+liaojingwu20041031@users.noreply.github.com">liaojingwu20041031</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- ament_cmake_python so ament_package() emits ament_prefix_path hooks. -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>vision_msgs</exec_depend>
+  <exec_depend>vision_perception_interfaces</exec_depend>
+  <!--
+    Python pins (numpy&lt;2, opencv-python-headless, onnxruntime) live in
+    setup.py and requirements-runtime.txt. Prefer installing that requirements
+    file into the user site-packages. Do not upgrade NumPy to 2.x or OpenCV
+    may fail with _ARRAY_API.
+  -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

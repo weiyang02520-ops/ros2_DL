@@ -1,0 +1,30 @@
+{
+  "stage": "V2_POSITION",
+  "result": "NOT_RUN",
+  "v2_accuracy": "BLOCKED",
+  "arm_ready": "NO",
+  "camera_contract": "NOT_RUN",
+  "source_kind": "OFFLINE_FILE",
+  "source_session_id": "",
+  "git_commit": "",
+  "git_dirty": null,
+  "host": "",
+  "notes": "Fill after offline objects / fake-depth smoke. Synthetic depth ≠ accuracy PASS. Independent surface-point truth required for V2_ACCURACY.",
+  "model_path": "",
+  "model_manifest_path": "",
+  "onnx_sha256": "",
+  "enable_objects": true,
+  "enable_tracking": false,
+  "orientation_valid_policy": "always_false",
+  "artifacts": {
+    "objects_csv": "objects.csv",
+    "objects_json": "objects.json",
+    "metrics_json": "metrics.json",
+    "paired_frames_csv": "paired_frames.csv",
+    "parameters_yaml": "parameters.yaml",
+    "source_hash_txt": "source_hash.txt",
+    "manifest_sha256": "manifest.sha256",
+    "acceptance_protocol_yaml": "acceptance_protocol.yaml",
+    "logs_dir": "logs/"
+  }
+}

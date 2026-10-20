@@ -1,0 +1,1 @@
+frame_id,stamp_sec,detection_index,class_name,confidence,bbox_center_x,bbox_center_y,bbox_size_x,bbox_size_y,object_id,tracking_valid,track_id,track_state,tracking_session_id

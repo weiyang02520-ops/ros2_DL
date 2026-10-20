@@ -1,0 +1,13 @@
+# Package-local attributes so an isolated workspace that only syncs
+# vision_perception(+_interfaces) still forces LF on libexec wrappers.
+# (Monorepo root .gitattributes may be absent after zip/SFTP of two packages.)
+#
+# CRLF shebang → `python3\r` → exit 127 on Linux.
+
+scripts/** text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf

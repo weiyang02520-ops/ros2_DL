@@ -1,0 +1,16 @@
+# Plan §10.3 defaults — revise before the run if owner rejects thresholds.
+stage: V3_TRACKING
+tracker_match_iou: 0.30
+tracker_confirm_hits: 3
+tracker_lost_timeout_sec: 0.70
+identity_annotations_required_for_idf1: true
+crossing_cups_may_switch_ids: true
+do_not_mark_pass_without:
+  - identity_annotated_sequence
+  - tracks.csv
+  - metrics.json
+  - session_reset_timeline
+arm_ready: "NO"
+idf1_without_identity_labels: BLOCKED
+result_without_identity_labels: NOT_RUN
+enable_tracking_note: "Default false; true only with mode:=v1_ros. Skeleton/offline reject."

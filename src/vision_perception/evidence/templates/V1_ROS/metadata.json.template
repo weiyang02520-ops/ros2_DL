@@ -1,0 +1,28 @@
+{
+  "stage": "V1_ROS",
+  "result": "NOT_RUN",
+  "arm_ready": "NO",
+  "camera_contract": "DEV_WEBCAM_ONLY / NOT_ZED",
+  "source_kind": "DEV_WEBCAM",
+  "source_session_id": "",
+  "git_commit": "",
+  "git_dirty": null,
+  "host": "Ubuntu103",
+  "rgb_topic": "/dg/vision/webcam/image_raw",
+  "use_fake_image": null,
+  "use_webcam": null,
+  "notes": "Fill after v1_ros smoke. Empty detections=[] on blank fake frames is healthy, not FAIL. Do not claim ZED or REAL_CAMERA here without authorization.",
+  "model_path": "",
+  "model_manifest_path": "",
+  "onnx_sha256": "",
+  "artifacts": {
+    "detections_csv": "detections.csv",
+    "status_snapshot": "status_once.yaml",
+    "parameters_yaml": "parameters.yaml",
+    "source_hash_txt": "source_hash.txt",
+    "manifest_sha256": "manifest.sha256",
+    "acceptance_protocol_yaml": "acceptance_protocol.yaml",
+    "logs_dir": "logs/",
+    "rosbag_or_inputs": "inputs/"
+  }
+}

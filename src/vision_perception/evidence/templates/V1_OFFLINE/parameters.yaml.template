@@ -1,0 +1,16 @@
+# Freeze before a formal V1_OFFLINE acceptance run. Copy into the run directory.
+stage: V1_OFFLINE
+mode: offline
+backend: onnxruntime_cpu
+enable_objects: false
+enable_tracking: false
+tracking_enabled: false
+confidence_threshold: 0.35
+nms_iou_threshold: 0.45
+max_detections: 20
+model_input_size: 640
+target_classes: [bottle, cup]
+model_path: ""
+model_manifest_path: ""
+arm_ready: "NO"
+camera_contract: NOT_RUN

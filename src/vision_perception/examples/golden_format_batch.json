@@ -1,0 +1,55 @@
+{
+  "stage": "V1_OFFLINE",
+  "camera_contract": "NOT_RUN",
+  "arm_ready": "NO",
+  "source_kind_note": "OFFLINE_FILE results are file evaluation outputs, not LIVE_CAMERA ROS observations",
+  "batches": [
+    {
+      "header": {
+        "frame_id": "",
+        "stamp": {
+          "sec": 0,
+          "nanosec": 0
+        }
+      },
+      "source_session_id": "FORMAT-SAMPLE-SESSION",
+      "observation_id": 1,
+      "calibration_id": "",
+      "source_kind": "OFFLINE_FILE",
+      "source_image_id": "format_sample.npy",
+      "image_width": 120,
+      "image_height": 80,
+      "detections": [
+        {
+          "detection_index": 0,
+          "class_name": "bottle",
+          "confidence": 0.88,
+          "bbox": {
+            "center_x": 60.0,
+            "center_y": 40.0,
+            "size_x": 40.0,
+            "size_y": 50.0,
+            "theta": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "header": {
+        "frame_id": "",
+        "stamp": {
+          "sec": 0,
+          "nanosec": 0
+        }
+      },
+      "source_session_id": "FORMAT-SAMPLE-SESSION",
+      "observation_id": 2,
+      "calibration_id": "",
+      "source_kind": "OFFLINE_FILE",
+      "source_image_id": "empty_scene.npy",
+      "image_width": 64,
+      "image_height": 64,
+      "detections": []
+    }
+  ]
+}

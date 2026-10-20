@@ -1,0 +1,8 @@
+stage: V0_SHELL
+mode: skeleton
+backend: unconfigured
+detector_enabled: false
+enable_objects: false
+enable_tracking: false
+arm_ready: "NO"
+camera_contract: NOT_RUN

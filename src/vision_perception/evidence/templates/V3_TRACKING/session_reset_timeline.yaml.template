@@ -1,0 +1,17 @@
+# Fill during a V3_TRACKING run. Record session resets / lost intervals.
+stage: V3_TRACKING
+arm_ready: "NO"
+events: []
+# Example entries (do not invent PASS from empty timelines):
+# - stamp_sec: 0.0
+#   event: session_start
+#   tracking_session_id: ""
+# - stamp_sec: 12.4
+#   event: calibration_change
+#   tracking_session_id: ""
+# - stamp_sec: 18.1
+#   event: stale_clear
+#   tracking_session_id: ""
+# - stamp_sec: 20.0
+#   event: track_lost_timeout
+#   object_id: trk_0001

@@ -1,0 +1,27 @@
+{
+  "stage": "V3_IDENTITY_ANNOTATIONS_EXAMPLE",
+  "note": "Synthetic identity labels aligned to track_sequence.example.json. Not a formal acceptance set.",
+  "frames": [
+    {
+      "frame_id": "f0",
+      "identities": [
+        {"detection_index": 0, "gt_id": "cup_left"},
+        {"detection_index": 1, "gt_id": "cup_right"}
+      ]
+    },
+    {
+      "frame_id": "f1",
+      "identities": [
+        {"detection_index": 0, "gt_id": "cup_left"},
+        {"detection_index": 1, "gt_id": "cup_right"}
+      ]
+    },
+    {
+      "frame_id": "f2",
+      "identities": [
+        {"detection_index": 0, "gt_id": "cup_left"},
+        {"detection_index": 1, "gt_id": "cup_right"}
+      ]
+    }
+  ]
+}

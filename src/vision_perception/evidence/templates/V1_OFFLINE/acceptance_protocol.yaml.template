@@ -1,0 +1,10 @@
+# Plan §10.1 defaults — revise before the run if owner rejects thresholds.
+stage: V1_OFFLINE
+iou_threshold: 0.5
+score_threshold: 0.35
+per_class_targets:
+  bottle: {precision: 0.90, recall: 0.85}
+  cup: {precision: 0.90, recall: 0.85}
+dataset_notes: ""
+label_hash: ""
+do_not_mark_pass_without: [labels, metrics.json, detections.csv]

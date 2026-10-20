@@ -1,0 +1,61 @@
+vision_perception_node:
+  ros__parameters:
+    # Default remains skeleton-only (no camera / inference / detections).
+    # Explicit V1 ROS path: mode:=v1_ros with local model + Image topic / webcam.
+    # mode:=v1 (legacy) is rejected. Offline files use vision_offline_detect.
+    mode: skeleton
+    detector_enabled: false
+    publish_debug_image: false
+    debug_image_topic: /dg/vision/debug_image
+    debug_image_max_hz: 2.0
+    input_stale_sec: 1.0
+    backend: unconfigured
+    model_path: ""
+    model_manifest_path: ""
+
+    # V2: enable_objects default false. true only with mode:=v1_ros (depth+/objects).
+    # V3: enable_tracking default false. true only with mode:=v1_ros (2D IoU tracker).
+    enable_objects: false
+    enable_tracking: false
+    tracking_enabled: false  # legacy synonym of enable_tracking
+    tracker_match_iou: 0.30
+    tracker_confirm_hits: 3
+    tracker_lost_timeout_sec: 0.70
+
+    # Dev webcam default RGB. Depth/CameraInfo names are configurable subscribers
+    # only (ZED defaults below are topic names, not a ZED camera_contract).
+    # Fake smoke: use_fake_depth:=true remaps to /dg/vision/fake/{depth,camera_info}.
+    # camera_contract for v1_ros remains DEV_WEBCAM_ONLY / NOT_ZED.
+    rgb_topic: /dg/vision/webcam/image_raw
+    depth_topic: /zed/zed_node/depth/depth_registered
+    camera_info_topic: /zed/zed_node/rgb/color/rect/camera_info
+    detections_topic: /dg/vision/detections_2d
+    objects_topic: /dg/vision/objects
+    status_topic: /dg/vision/status
+    target_classes: [bottle, cup]
+    video_device: 0
+    image_frame_id: webcam_optical_frame
+    camera_contract: NOT_RUN
+
+    # V4 plan defaults. Depth/sync used only when enable_objects:=true.
+    output_frame_policy: input_optical_header
+    sync_tolerance_sec: 0.010
+    sync_wait_sec: 0.100  # hold RGB until matching depth or timeout
+    sync_queue_size: 10
+    max_observation_age_sec: 0.500  # drop outputs older than this (source stamp)
+    min_depth_m: 0.5
+    max_depth_m: 1.5
+    mask_erode_kernel: 3
+    depth_patch_size: 7
+    min_patch_pixels: 25
+    min_valid_depth_fraction: 0.60
+    max_depth_mad_m: 0.020
+    max_depth_spread_m: 0.050
+    inference_rate_hz: 5.0
+    confidence_threshold: 0.35
+    nms_iou_threshold: 0.45
+    max_detections: 20
+    ort_threads: 2
+    model_input_size: 640
+    status_rate_hz: 1.0
+    pending_frames: 1

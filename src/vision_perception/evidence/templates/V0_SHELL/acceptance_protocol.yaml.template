@@ -1,0 +1,8 @@
+stage: V0_SHELL
+source_kind: NONE_NOT_APPLICABLE
+must_not_claim:
+  - REAL_CAMERA
+  - LIVE_CAMERA
+  - ZED_PASS
+arm_ready: "NO"
+result_without_owner_run: NOT_RUN

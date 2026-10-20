@@ -1,0 +1,17 @@
+{
+  "stage": "V0_SHELL",
+  "result": "NOT_RUN",
+  "arm_ready": "NO",
+  "camera_contract": "NOT_RUN",
+  "source_kind": "NONE_NOT_APPLICABLE",
+  "source_session_id": "",
+  "git_commit": "",
+  "git_dirty": null,
+  "host": "",
+  "notes": "Skeleton status-only shell. No camera / inference / detections. Do not claim REAL_CAMERA.",
+  "artifacts": {
+    "parameters_yaml": "parameters.yaml",
+    "acceptance_protocol_yaml": "acceptance_protocol.yaml",
+    "logs_dir": "logs/"
+  }
+}

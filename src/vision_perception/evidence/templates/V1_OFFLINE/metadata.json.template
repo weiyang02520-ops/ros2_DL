@@ -1,0 +1,25 @@
+{
+  "stage": "V1_OFFLINE",
+  "result": "NOT_RUN",
+  "arm_ready": "NO",
+  "camera_contract": "NOT_RUN",
+  "source_kind": "OFFLINE_FILE",
+  "source_session_id": "",
+  "git_commit": "",
+  "git_dirty": null,
+  "host": "",
+  "notes": "Fill after offline CLI run. Do not mark PASS without metrics + labels.",
+  "model_path": "",
+  "model_manifest_path": "",
+  "onnx_sha256": "",
+  "artifacts": {
+    "detections_csv": "detections.csv",
+    "detections_json": "detections.json",
+    "metrics_json": "metrics.json",
+    "parameters_yaml": "parameters.yaml",
+    "source_hash_txt": "source_hash.txt",
+    "manifest_sha256": "manifest.sha256",
+    "acceptance_protocol_yaml": "acceptance_protocol.yaml",
+    "logs_dir": "logs/"
+  }
+}

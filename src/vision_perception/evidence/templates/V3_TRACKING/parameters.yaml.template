@@ -1,0 +1,20 @@
+# Freeze before a formal V3_TRACKING acceptance run. Copy into the run directory.
+stage: V3_TRACKING
+mode: v1_ros
+backend: onnxruntime_cpu
+enable_objects: false
+enable_tracking: true
+tracking_enabled: true
+tracker_match_iou: 0.30
+tracker_confirm_hits: 3
+tracker_lost_timeout_sec: 0.70
+confidence_threshold: 0.35
+nms_iou_threshold: 0.45
+max_detections: 20
+model_input_size: 640
+target_classes: [bottle, cup]
+model_path: ""
+model_manifest_path: ""
+arm_ready: "NO"
+camera_contract: DEV_WEBCAM_ONLY / NOT_ZED
+orientation_valid: false

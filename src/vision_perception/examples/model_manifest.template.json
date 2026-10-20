@@ -1,0 +1,22 @@
+{
+  "source": "ultralytics YOLO11n-seg COCO pretrained; exported locally — NOT committed to git",
+  "weights_sha256": "REPLACE_WITH_PT_OR_WEIGHTS_SHA256",
+  "onnx_sha256": "REPLACE_WITH_ONNX_FILE_SHA256",
+  "license": "REPLACE_AFTER_UPSTREAM_LICENSE_REVIEW (do not ship weights until cleared)",
+  "export_tool_versions": {
+    "ultralytics": "8.3.0",
+    "torch": "2.4.1",
+    "torchvision": "0.19.1",
+    "onnx": "1.16.2",
+    "opset": 17,
+    "notes": "FP32, imgsz=640, batch=1, dynamic=false, simplify=false; NMS NOT embedded in ONNX"
+  },
+  "input_name": "images",
+  "input_shape": [1, 3, 640, 640],
+  "output0_shape": [1, 116, 8400],
+  "output1_shape": [1, 32, 160, 160],
+  "class_map": {
+    "bottle": 39,
+    "cup": 41
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "stage": "V1_OFFLINE_ANNOTATIONS",
+  "note": "Example only. Real evaluation needs owner-labeled images; do not treat this file as a PASS dataset.",
+  "images": [
+    {
+      "source_image_id": "format_sample.npy",
+      "width": 120,
+      "height": 80,
+      "boxes": [
+        {
+          "class_name": "bottle",
+          "x_min": 40.0,
+          "y_min": 15.0,
+          "x_max": 80.0,
+          "y_max": 65.0
+        }
+      ]
+    },
+    {
+      "source_image_id": "empty_scene.npy",
+      "width": 64,
+      "height": 64,
+      "boxes": []
+    }
+  ]
+}

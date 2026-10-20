@@ -1,0 +1,18 @@
+# Plan §10.2 defaults — revise before the run if owner rejects thresholds.
+stage: V2_POSITION
+position_error_median_m_target: 0.030
+position_error_p95_m_target: 0.050
+opaque_end_to_end_coverage_target: 0.80
+working_distance_m: [0.5, 1.0, 1.5]
+mask_source_preferred: yolo_seg
+mask_source_fallback: bbox_fill
+synthetic_depth_may_not_pass_accuracy: true
+independent_surface_truth_required_for_accuracy: true
+do_not_mark_pass_without:
+  - independent_surface_point_truth
+  - objects.csv
+  - metrics.json
+  - calib_contract
+arm_ready: "NO"
+v2_accuracy_without_truth: BLOCKED
+result_without_truth: NOT_RUN
