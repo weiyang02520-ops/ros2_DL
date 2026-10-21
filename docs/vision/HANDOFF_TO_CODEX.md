@@ -49,27 +49,38 @@
 | `scripts/vision_delivery/README.md` | 说明 |
 | `scripts/docker_humble_smoke.sh` | 云端/PC Docker Humble 冒烟 |
 
-**§11 交付包（云端可写）**
+**§11 交付包 + 本轮云端模型/冒烟**
 
 | 文件 | 作用 |
 |---|---|
 | `docs/vision/delivery/MIGRATION_GUIDE.md` | 迁移顺序 |
 | `docs/vision/delivery/ACCEPTANCE.md` | 验收壳 |
 | `docs/vision/delivery/RESULTS_TABLE_TEMPLATE.csv` | 结果表模板（勿填假数） |
-| `docs/vision/delivery/MODEL_AND_DEPS.md` | 模型依赖索引 |
+| `docs/vision/delivery/MODEL_AND_DEPS.md` | 模型依赖索引 + 云端实测 SHA |
+| `docs/vision/delivery/MODEL_EXPORT_REPRO.md` | ONNX 导出命令/版本/复现同一 SHA |
+| `docs/vision/delivery/SYNTHETIC_SMOKE_RECORD.md` | 真 ONNX + 假流 e2e（SYNTHETIC） |
+| `docs/vision/delivery/ARM64_QEMU_RECORD.md` | QEMU aarch64 装依赖/colcon/pytest（≠ Jetson） |
+| `examples/model_manifest.cloud_export.example.json` | 已填云端 SHA 的 manifest 示例 |
+| `scripts/docker_humble_e2e_synthetic_smoke.sh` | 假流 + 真 ONNX e2e |
+| `scripts/docker_arm64_qemu_smoke.sh` | Docker+QEMU arm64 冒烟 |
+| `message_mapping._fill_vision_pose2d` | 兼容 vision_msgs≥4.1 nested `position.x/y` |
 | `evidence/templates/W5_TRANSFORM/`、`ACCEPTANCE/` | 证据空壳 |
 
 接口：`INTERFACE_CONTRACT.md` 已补 W5 `/dg/vision/objects_target` 语义。
 
+**模型产物（不进 git）**：云端 artifacts `/opt/cursor/artifacts/vision_models/` — `yolo11n-seg.onnx` SHA `6e448a4d…0978`；`.pt` SHA `55ed65c5…e152`。公库勿提交权重。
+
 ### 未完成（必须本机/实机）
 
-- 模型 ONNX 导出与 SHA 填入（权重不进 git）
-- Jetson aarch64 真实 `pip`/`colcon`（Docker x86 ≠ ARM64 RUN）
+- Jetson **本机** aarch64 `pip`/`colcon`（QEMU ≠ Jetson；无 CUDA/JetPack）
 - 真 ZED 流、话题/编码复核、窗口 A/B 测量
 - W5 **实机**外参/TF 与 `/objects_target` 精度
 - 透明路线 B 实测
 - 填写 `current_robot.yaml` 实测字段与 ACCEPTANCE 真值表
+- 合成 e2e 中 `DEPTH_UNPAIRED` 若需 `position_valid`：本机用真深度或修好假流 stamp 再验（非实机 PASS）
 - 合并 `main` / 生产部署（禁止，除非用户另批）
+
+> 云端已完成：公开 YOLO11n-seg ONNX 导出 + SHA 文档；Docker 真 ONNX 假流 e2e（SYNTHETIC）；QEMU arm64 依赖/构建/pytest。本机阶段 0 **不必再导出模型**（除非复现 SHA 失败），只需拷贝/复现到 `$HOME/vision_models/`。
 
 ---
 
@@ -79,16 +90,18 @@
 
 | 命令 | 结果 | 标签 |
 |---|---|---|
-| `pytest`（`src/vision_perception/test`） | **149 passed** | SOFTWARE_CHECKED |
-| `bash scripts/docker_humble_smoke.sh`（`ros:humble-ros-base-jammy`） | `colcon build` 两包成功；三 launch `--show-args` OK；`mode:=skeleton` 限时启动（timeout 124=预期）；容器内 pytest 149 passed；`DOCKER_SMOKE_OK` | SOFTWARE_CHECKED |
-| Docker 假流 + 真 ONNX 端到端 | **未跑**（无权重） | NOT_RUN |
-| 真相机 / Jetson ARM64 RUN | **未跑** | NOT_RUN |
+| `pytest`（`src/vision_perception/test`） | **150 passed**（含 Pose2D 布局兼容） | SOFTWARE_CHECKED |
+| `bash scripts/docker_humble_smoke.sh` | `colcon` 两包；launch `--show-args`；`mode:=skeleton`；容器 pytest；`DOCKER_SMOKE_OK` | SOFTWARE_CHECKED |
+| Ultralytics 导出 YOLO11n-seg ONNX | 输入 `1x3x640x640`；`output0 1x116x8400` + `output1 1x32x160x160`；SHA 见 `MODEL_EXPORT_REPRO.md` | SOFTWARE_CHECKED |
+| `bash scripts/docker_humble_e2e_synthetic_smoke.sh` | 真 ONNX + COCO 样例假流；`detections_2d` 3×bottle；`source_kind=SYNTHETIC_DEV`；objects 保留但 `DEPTH_UNPAIRED`；`E2E_SYNTHETIC_SMOKE_OK` | **SYNTHETIC**（非实机 PASS） |
+| `bash scripts/docker_arm64_qemu_smoke.sh` | `arm64v8/ros:humble` + binfmt；`requirements-arm64.txt` 可装；colcon 两包；pytest 150；`ARM64_QEMU_SMOKE_OK` | SOFTWARE_CHECKED（**≠ Jetson**） |
+| 真相机 / Jetson 板载 RUN | **未跑** | NOT_RUN |
 
-**假数据 / skeleton / Docker x86 ≠ 实机 PASS，不得记 `LIVE_CAMERA_OBSERVED`。**
+**假数据 / skeleton / Docker x86 / QEMU ≠ 实机 PASS，不得记 `LIVE_CAMERA_OBSERVED`。**
 
-### 未验证清单
+### 未验证清单（仅实机/Jetson）
 
-`colcon` 在 Jetson 本机、假流+ONNX 冒烟、真 ZED、精度、挪位、透明 B、W5 实机 TF、对方标定。
+真 ZED、板载 pip/colcon/CUDA EP、精度、挪位、透明 B、W5 实机 TF、对方标定、ACCEPTANCE 真值。
 
 ---
 
@@ -97,14 +110,16 @@
 > 默认**预览**；加 `--execute` / `-Execute` 才跑。电池窗口短，按序、可砍项已标明。  
 > **每步标注是否需用户单独授权。**
 
-### 阶段 0 — 关机准备（可不连机器人）
+### 阶段 0 — 关机准备（可不连机器人；已精简）
+
+云端已导出 ONNX 并跑通合成 e2e / QEMU arm64。本机只做**落盘 + 隔离安装**，勿重复摸索导出合同。
 
 | 序 | 动作 | 预计 | 通过 | 失败 | 授权 |
 |---|---|---|---|---|---|
 | 0.1 | `git fetch && git checkout codex/zed-bottle-w1-w4` | 2 min | tip 与 PR 一致 | 停 | 否 |
-| 0.2 | 导出 YOLO11n-seg ONNX + 填 manifest SHA（见 `delivery/MODEL_AND_DEPS.md`） | 10–30 min | 文件在 `$HOME/vision_models/` | 无模型不开机 | 否 |
-| 0.3 | 隔离目录：`pip install -r requirements-arm64.txt`；只 build 两包 | 视机 | import ORT OK；`ros2 pkg prefix` | 不改生产软链 | **建议用户确认隔离路径** |
-| 0.4 | （可选）PC 再跑 `docker_humble_smoke.sh` | 5–15 min | DOCKER_SMOKE_OK | 记日志 | 否 |
+| 0.2 | 模型落盘：按 [`delivery/MODEL_EXPORT_REPRO.md`](./delivery/MODEL_EXPORT_REPRO.md) 复现 **同一** `onnx_sha256=6e448a4d…0978`，或从既有 artifacts 拷到 `$HOME/vision_models/`；复制 `model_manifest.cloud_export.example.json` → `model_manifest.json` | 5–15 min | `sha256sum` 与文档一致 | SHA 不符则更新 manifest 为本机实测值，勿强行沿用 | 否 |
+| 0.3 | 隔离目录：`pip install -r requirements-arm64.txt`；只 build 两包（QEMU 已证 wheel 存在，仍须 **Jetson 本机**再跑一遍） | 视机 | import ORT OK；`ros2 pkg prefix` | 不改生产软链 | **建议用户确认隔离路径** |
+| 0.4 | （可选）PC：`docker_humble_smoke.sh` / `docker_humble_e2e_synthetic_smoke.sh`（需挂载模型目录） | 5–20 min | `*_SMOKE_OK` | 记日志；仍标 SYNTHETIC | 否 |
 | 0.5 | 预览：`bash Run-VisionStage.sh Perception`（无 `--execute`） | 1 min | 打印命令 | — | 否 |
 
 回退：删隔离 ws；`git checkout vision/v1-v3`。
@@ -124,7 +139,7 @@
 | A4 | `Run-ReadOnly.ps1 -Step 03 -Execute` ~15s | 0.5 min | RGB/Depth/Info 齐；填 `current_robot.yaml` | 话题不符→改 profile | 用户 |
 | A5 | `Run-VisionStage.sh Perception --execute` | 0.5–1 min | status 非 FATAL；`source_kind=LIVE_CAMERA` | 存日志关机 | **用户授权感知** |
 | A6 | `Subscriber` + 短 `Capture --duration=20`；摆 1 瓶/杯两位置 | 1–2 min | 有观测；无效 NaN+reason | 只记链路 | 用户摆物 |
-| A7 | `StopOwn --execute`；日志回 PC | 0.5–1 min | 无悬挂本次 PID | 勿 pkill 整机 | 用户 |
+| A7 | `StopOwn --execute`；日志回 PC | 0.5 min | 无悬挂本次 PID | 勿 pkill 整机 | 用户 |
 | A8 | 正常停机 | ≥2 min | 留余量 | — | 用户 |
 
 感知命令备忘：
@@ -209,3 +224,6 @@ git fetch origin && git checkout vision/v1-v3
 | 订阅打印 | `ros2 run vision_perception vision_subscribe_objects` |
 | 阶段脚本 | `scripts/vision_delivery/` |
 | Docker 冒烟 | `scripts/docker_humble_smoke.sh` |
+| 真 ONNX 假流 e2e | `scripts/docker_humble_e2e_synthetic_smoke.sh` |
+| ARM64 QEMU | `scripts/docker_arm64_qemu_smoke.sh` |
+| 模型复现 | `docs/vision/delivery/MODEL_EXPORT_REPRO.md` |

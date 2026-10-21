@@ -101,3 +101,32 @@ def test_v1_msg_files_match_plan_fields():
         "VisionObject[] objects",
     ):
         assert token in object_array
+
+
+def test_fill_vision_pose2d_supports_flat_and_nested_layouts():
+    from vision_perception.message_mapping import _fill_vision_pose2d
+
+    class Flat:
+        def __init__(self):
+            self.x = 0.0
+            self.y = 0.0
+            self.theta = 0.0
+
+    class Point:
+        def __init__(self):
+            self.x = 0.0
+            self.y = 0.0
+
+    class Nested:
+        def __init__(self):
+            self.position = Point()
+            self.theta = 0.0
+
+    flat = Flat()
+    _fill_vision_pose2d(flat, x=1.5, y=2.5, theta=0.1)
+    assert flat.x == 1.5 and flat.y == 2.5 and flat.theta == 0.1
+
+    nested = Nested()
+    _fill_vision_pose2d(nested, x=3.0, y=4.0, theta=-0.2)
+    assert nested.position.x == 3.0 and nested.position.y == 4.0
+    assert nested.theta == -0.2

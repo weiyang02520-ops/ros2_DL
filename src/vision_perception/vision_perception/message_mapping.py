@@ -163,6 +163,22 @@ VISION_OBJECT_ARRAY_DICT_FIELDS = (
 )
 
 
+def _fill_vision_pose2d(centre: Any, *, x: float, y: float, theta: float) -> Any:
+    """Fill vision_msgs/Pose2D across layout versions.
+
+    Older vision_msgs: Pose2D has flat ``x`` / ``y`` / ``theta``.
+    vision_msgs ≥4.1 (Humble updates): Pose2D has ``position`` (Point2D) + ``theta``.
+    """
+    centre.theta = float(theta)
+    if hasattr(centre, "position") and not hasattr(centre, "x"):
+        centre.position.x = float(x)
+        centre.position.y = float(y)
+    else:
+        centre.x = float(x)
+        centre.y = float(y)
+    return centre
+
+
 def try_build_vision_detection_array_msg(batch: DetectionBatch):
     """Build vision_perception_interfaces/VisionDetectionArray when ROS msgs exist."""
     try:
@@ -193,9 +209,12 @@ def try_build_vision_detection_array_msg(batch: DetectionBatch):
         det.confidence = float(item.confidence)
         bbox = BoundingBox2D()
         centre = Pose2D()
-        centre.x = float(item.bbox.center_x)
-        centre.y = float(item.bbox.center_y)
-        centre.theta = float(item.bbox.theta)
+        _fill_vision_pose2d(
+            centre,
+            x=float(item.bbox.center_x),
+            y=float(item.bbox.center_y),
+            theta=float(item.bbox.theta),
+        )
         bbox.center = centre
         bbox.size_x = float(item.bbox.size_x)
         bbox.size_y = float(item.bbox.size_y)
@@ -319,9 +338,12 @@ def try_build_vision_object_array_msg(batch: "ObjectBatch"):
         obj.confidence = float(item.confidence)
         bbox = BoundingBox2D()
         centre = Pose2D()
-        centre.x = float(item.bbox_center_x)
-        centre.y = float(item.bbox_center_y)
-        centre.theta = float(item.bbox_theta)
+        _fill_vision_pose2d(
+            centre,
+            x=float(item.bbox_center_x),
+            y=float(item.bbox_center_y),
+            theta=float(item.bbox_theta),
+        )
         bbox.center = centre
         bbox.size_x = float(item.bbox_size_x)
         bbox.size_y = float(item.bbox_size_y)
