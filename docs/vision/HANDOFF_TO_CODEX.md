@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 分支 | `codex/zed-bottle-w1-w4`（基线 `vision/v1-v3`；tip `85ceaa7`） |
+| 分支 | `codex/zed-bottle-w1-w4`（基线 `vision/v1-v3`；以分支 tip 为准） |
 | Draft PR | → `vision/v1-v3`（**勿合并** `main` / 存档分支） |
 | 范围 | W1–W7 软件 + §11 可云端交付物；**实机仍 NOT_RUN** |
 | 硬约束 | 不改 ZED SDK/驱动、Nav2、底盘、机械臂、生产服务/软链；无运动/`/initialpose`/正式 TF 发布 |
