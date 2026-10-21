@@ -15,11 +15,21 @@ ALLOWED_CLASSES = ("bottle", "cup")
 SOURCE_KIND_LIVE = "LIVE_CAMERA"
 SOURCE_KIND_RECORDED = "RECORDED_CAMERA"
 SOURCE_KIND_FILE = "OFFLINE_FILE"
+# Development / synthetic streams only — must never be labeled LIVE_CAMERA.
+SOURCE_KIND_SYNTHETIC = "SYNTHETIC_DEV"
+
+ALLOWED_SOURCE_KINDS = (
+    SOURCE_KIND_LIVE,
+    SOURCE_KIND_RECORDED,
+    SOURCE_KIND_FILE,
+    SOURCE_KIND_SYNTHETIC,
+)
 
 INVALID_REASONS = (
     "OK",
     "DEPTH_UNPAIRED",
     "MASK_TOO_SMALL",
+    "MASK_DEGRADED",
     "DEPTH_INSUFFICIENT",
     "DEPTH_DISCONTINUITY",
     "INPUT_INVALID",
@@ -201,3 +211,40 @@ def detection_mask_or_none(detection: Detection) -> Optional[np.ndarray]:
     if array.ndim != 2 or array.size == 0:
         return None
     return np.ascontiguousarray((array > 0).astype(np.uint8))
+
+
+def topic_looks_synthetic(topic: str) -> bool:
+    """True for fake/dev synthetic Image topics (not a live camera claim)."""
+    parts = [p for p in str(topic).strip().lower().split("/") if p]
+    if not parts:
+        return False
+    if "fake" in parts:
+        return True
+    joined = "/".join(parts)
+    return joined.startswith("dg/vision/fake/") or "/fake/" in f"/{joined}/"
+
+
+def resolve_observation_source_kind(
+    *,
+    explicit: str = "",
+    input_profile: str = "default",
+    rgb_topic: str = "",
+) -> str:
+    """Resolve observation source_kind. Fake streams are never LIVE_CAMERA."""
+    value = str(explicit or "").strip()
+    if value:
+        if value not in ALLOWED_SOURCE_KINDS:
+            raise ValueError(
+                f"unsupported source_kind={value!r}; allowed={ALLOWED_SOURCE_KINDS}"
+            )
+        return value
+    profile = str(input_profile or "default").strip().lower()
+    if profile in {"fake_dev", "synthetic", "fake"}:
+        return SOURCE_KIND_SYNTHETIC
+    if profile in {"recorded", "bag", "replay"}:
+        return SOURCE_KIND_RECORDED
+    if topic_looks_synthetic(rgb_topic):
+        return SOURCE_KIND_SYNTHETIC
+    if profile in {"zed_subscribe", "zed", "live"}:
+        return SOURCE_KIND_LIVE
+    return SOURCE_KIND_LIVE

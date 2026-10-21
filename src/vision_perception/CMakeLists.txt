@@ -19,10 +19,16 @@ install(DIRECTORY launch config examples evidence
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(DIRECTORY scripts/vision_delivery
+  DESTINATION share/${PROJECT_NAME}/scripts
+  USE_SOURCE_PERMISSIONS
+)
+
 install(FILES
   package.xml
   README.md
   requirements-runtime.txt
+  requirements-arm64.txt
   .gitattributes
   DESTINATION share/${PROJECT_NAME}
 )
@@ -47,6 +53,8 @@ install(PROGRAMS
   scripts/vision_webcam_publisher
   scripts/vision_fake_image_publisher
   scripts/vision_fake_depth_publisher
+  scripts/vision_object_transform_node
+  scripts/vision_subscribe_objects
   DESTINATION lib/${PROJECT_NAME}
   PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
@@ -67,6 +75,8 @@ install(CODE [[
       vision_webcam_publisher
       vision_fake_image_publisher
       vision_fake_depth_publisher
+      vision_object_transform_node
+      vision_subscribe_objects
     )
     set(_path "${_vision_libexec}/${_name}")
     if(EXISTS "${_path}")

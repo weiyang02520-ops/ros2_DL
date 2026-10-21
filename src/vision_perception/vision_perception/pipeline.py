@@ -18,9 +18,9 @@ from vision_perception.image_io import (
 from vision_perception.message_mapping import detection_batch_to_dict
 from vision_perception.onnx_backend import OnnxSession, create_onnx_session, run_onnx
 from vision_perception.postprocess import decode_yolo11_seg_boxes
+from vision_perception.config import resolved_source_kind
 from vision_perception.types import (
     SOURCE_KIND_FILE,
-    SOURCE_KIND_LIVE,
     DetectionBatch,
     FrameKey,
 )
@@ -45,7 +45,10 @@ class DetectionEngine:
             manifest_path=config.model_manifest_path,
             ort_threads=config.ort_threads,
         )
-        source_kind = SOURCE_KIND_FILE if config.mode == "offline" else SOURCE_KIND_LIVE
+        if config.mode == "offline":
+            source_kind = SOURCE_KIND_FILE
+        else:
+            source_kind = resolved_source_kind(config)
         return cls(
             config=config,
             session=session,

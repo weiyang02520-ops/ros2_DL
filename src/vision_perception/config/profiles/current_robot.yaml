@@ -1,0 +1,40 @@
+# 当前机器人实采 profile 占位（§11）。实机 Step 03 填齐前保持 NOT_RUN 标记。
+# 禁止凭照片猜测 frame/内参；话题名以机上实测为准。
+
+meta:
+  robot_id: DG202611_current
+  status: NOT_RUN_PENDING_LIVE_CAPTURE
+  notes: >
+    Fill after authorized camera observation. Do not invent optical frame names
+    or intrinsics from photos.
+
+vision_perception_node:
+  ros__parameters:
+    mode: v1_ros
+    input_profile: zed_subscribe
+    camera_contract: "ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK"
+    source_kind: ""
+    image_qos_reliability: best_effort
+    # Expected names from vision_fix Step 03 — confirm live before relying:
+    rgb_topic: /zed/zed_node/rgb/color/rect/image
+    depth_topic: /zed/zed_node/depth/depth_registered
+    camera_info_topic: /zed/zed_node/rgb/color/rect/camera_info
+    image_frame_id: ""          # 实测 CameraInfo.header.frame_id 后填写
+    enable_objects: false
+    enable_tracking: false
+    allow_bbox_mask_fallback: false
+    require_rgb_depth_same_size: true
+    require_depth_calib_same_frame: true
+    max_observation_age_sec: 0.500
+    min_depth_m: 0.5
+    max_depth_m: 1.5
+
+observed_contract:
+  rgb_encoding: ""              # 例  rgb8 / bgr8
+  depth_encoding: ""            # 例  32FC1
+  depth_unit: metres
+  width: null
+  height: null
+  frame_id: ""
+  last_observed_utc: ""
+  evidence_path: ""

@@ -1,0 +1,2 @@
+sample_id,route_AB,object_class,material_note,distance_m,lighting,position_label,stamp_utc,xyz_cam_m,xyz_measured_m,error_mm,position_valid,invalid_reason,source_kind,git_commit,notes
+1,A,bottle,opaque_placeholder,NOT_RUN,NOT_RUN,P1,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,do_not_fabricate

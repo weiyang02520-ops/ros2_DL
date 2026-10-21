@@ -1,0 +1,11 @@
+{
+  "stage": "W5_TRANSFORM",
+  "result": "NOT_RUN",
+  "source_kind": "NOT_APPLICABLE_UNTIL_LIVE",
+  "enabled": false,
+  "mode": "static_extrinsics_or_tf",
+  "publishes_tf": false,
+  "control_output_active": false,
+  "arm_ready": "NO",
+  "notes": "Fill after software check or peer calibration. Identity extrinsics are forbidden."
+}

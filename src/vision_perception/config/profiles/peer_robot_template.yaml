@@ -1,0 +1,37 @@
+# 对方机器人空模板（§11）。默认不启用转换；禁止预填本机外参。
+# 对方填写 target_frame、外参/TF 链与标定日期后再 enabled:=true。
+
+vision_object_transform_node:
+  ros__parameters:
+    enabled: false
+    mode: static_extrinsics   # 或 tf（动态链由对方提供完整 TF）
+    source_frame: ""          # 例：zed_left_camera_optical_frame（以对方实采为准）
+    target_frame: ""          # 例：arm_base（对方命名）
+    extrinsics_id: ""
+    calibration_date: ""      # YYYY-MM-DD
+    source_note: >
+      p_target = R_target_from_source * p_source + t_target_from_source (metres).
+      quaternion_xyzw = [x,y,z,w] orientation of source expressed in target
+      (same convention as geometry_msgs/TransformStamped).
+      translation_m = origin of source frame expressed in target frame.
+      Do NOT copy matrices from another robot. Do NOT use identity as "ready".
+    translation_m: [0.0, 0.0, 0.0]  # placeholder only while enabled:=false
+    quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+    rotation_matrix: []
+    tf_timeout_sec: 0.05
+    objects_input_topic: /dg/vision/objects
+    objects_target_topic: /dg/vision/objects_target
+    status_topic: /dg/vision/transform_status
+    status_rate_hz: 1.0
+
+# 对方相机订阅侧（相机坐标层，先跑通再开转换）
+vision_perception_node:
+  ros__parameters:
+    input_profile: zed_subscribe
+    camera_contract: "ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK"
+    rgb_topic: ""             # 对方实填
+    depth_topic: ""
+    camera_info_topic: ""
+    enable_objects: false
+    enable_tracking: false
+    allow_bbox_mask_fallback: false

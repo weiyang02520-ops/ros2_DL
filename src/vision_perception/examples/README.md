@@ -46,4 +46,23 @@ Optional overlay (default off):
 publish_debug_image:=true   # /dg/vision/debug_image ≤2 Hz; no GUI
 ```
 
-See package `README.md` for Ubuntu103 shortest smoke commands and **未做项 (NOT_RUN)**.
+## W6 只订阅示例（无控制）
+
+```bash
+ros2 run vision_perception vision_subscribe_objects
+# 同时看目标坐标（若 W5 已启）：
+ros2 run vision_perception vision_subscribe_objects -- --target-topic /dg/vision/objects_target
+```
+
+打印类别 / 有效性 / XYZ / frame / 时间戳 / invalid_reason；**不发布** cmd_vel、goal、TF。
+
+## W5 转换（默认关）
+
+```bash
+ros2 launch vision_perception vision_object_transform.launch.py
+# 仅在有真实外参后：
+# ros2 launch vision_perception vision_object_transform.launch.py enabled:=true \
+#   source_frame:=... target_frame:=... extrinsics_id:=PEER_CALIB_YYYYMMDD
+```
+
+See package `README.md` and `docs/vision/HANDOFF_TO_CODEX.md` for **未做项 (NOT_RUN)**.

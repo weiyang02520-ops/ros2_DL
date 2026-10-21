@@ -23,7 +23,10 @@ geometry_msgs/Point position
 bool position_valid
 # Always visible_surface_sample when a surface sample is intended; do not encode failures here.
 string position_reference
-# OK / DEPTH_UNPAIRED / MASK_TOO_SMALL / DEPTH_INSUFFICIENT / DEPTH_DISCONTINUITY / INPUT_INVALID / STALE.
+# OK / DEPTH_UNPAIRED / MASK_TOO_SMALL / MASK_DEGRADED / DEPTH_INSUFFICIENT /
+# DEPTH_DISCONTINUITY / INPUT_INVALID / STALE.
+# MASK_DEGRADED: instance mask missing/mismatched and bbox fallback rejected
+# (allow_bbox_mask_fallback:=false). Never zero-fill or reuse a previous XYZ.
 string invalid_reason
 float64 reference_u
 float64 reference_v

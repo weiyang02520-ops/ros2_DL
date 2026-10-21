@@ -1,0 +1,49 @@
+# 假流 / 开发冒烟 profile（W1）：source_kind 固定为 SYNTHETIC_DEV，禁止冒充 LIVE_CAMERA。
+# 配合 launch use_fake_image:=true / use_fake_depth:=true。假数据结果不得记实机 PASS。
+
+vision_perception_node:
+  ros__parameters:
+    mode: v1_ros
+    detector_enabled: true
+    backend: onnxruntime_cpu
+    publish_debug_image: false
+    enable_objects: false
+    enable_tracking: false
+    tracking_enabled: false
+
+    input_profile: fake_dev
+    source_kind: SYNTHETIC_DEV
+    image_qos_reliability: reliable
+    camera_contract: "DEV_WEBCAM_ONLY / NOT_ZED"
+
+    rgb_topic: /dg/vision/webcam/image_raw
+    depth_topic: /dg/vision/fake/depth
+    camera_info_topic: /dg/vision/fake/camera_info
+    detections_topic: /dg/vision/detections_2d
+    objects_topic: /dg/vision/objects
+    status_topic: /dg/vision/status
+    target_classes: [bottle, cup]
+    image_frame_id: fake_webcam_optical_frame
+
+    # 假流允许 bbox 退化以便管道冒烟；仍会在 status 暴露 mask_degraded_count。
+    allow_bbox_mask_fallback: true
+    require_rgb_depth_same_size: true
+    require_depth_calib_same_frame: true
+
+    sync_tolerance_sec: 0.010
+    sync_wait_sec: 0.100
+    sync_queue_size: 10
+    max_observation_age_sec: 0.500
+    input_stale_sec: 1.0
+    min_depth_m: 0.5
+    max_depth_m: 1.5
+    inference_rate_hz: 5.0
+    confidence_threshold: 0.35
+    nms_iou_threshold: 0.45
+    max_detections: 20
+    ort_threads: 2
+    model_input_size: 640
+    status_rate_hz: 1.0
+    pending_frames: 1
+    model_path: ""
+    model_manifest_path: ""

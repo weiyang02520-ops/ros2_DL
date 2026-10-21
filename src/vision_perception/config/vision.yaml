@@ -22,10 +22,17 @@ vision_perception_node:
     tracker_confirm_hits: 3
     tracker_lost_timeout_sec: 0.70
 
+    # Input provenance (W1). fake_dev → SYNTHETIC_DEV; zed_subscribe → LIVE_CAMERA.
+    # Empty source_kind auto-resolves; fake topics never become LIVE_CAMERA.
+    input_profile: default
+    source_kind: ""
+    image_qos_reliability: best_effort
+
     # Dev webcam default RGB. Depth/CameraInfo names are configurable subscribers
-    # only (ZED defaults below are topic names, not a ZED camera_contract).
+    # only (ZED defaults below are topic names, not a ZED SDK start).
     # Fake smoke: use_fake_depth:=true remaps to /dg/vision/fake/{depth,camera_info}.
-    # camera_contract for v1_ros remains DEV_WEBCAM_ONLY / NOT_ZED.
+    # camera_contract for v1_ros: DEV_WEBCAM_ONLY / NOT_ZED or
+    # ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK (see config/profiles/).
     rgb_topic: /dg/vision/webcam/image_raw
     depth_topic: /zed/zed_node/depth/depth_registered
     camera_info_topic: /zed/zed_node/rgb/color/rect/camera_info
@@ -37,12 +44,19 @@ vision_perception_node:
     image_frame_id: webcam_optical_frame
     camera_contract: NOT_RUN
 
+    # V2 quality (W2). allow_bbox_mask_fallback=true keeps fake-smoke plumbing;
+    # ZED delivery profile sets false (MASK_DEGRADED instead of silent bbox fill).
+    allow_bbox_mask_fallback: true
+    require_rgb_depth_same_size: true
+    require_depth_calib_same_frame: true
+
     # V4 plan defaults. Depth/sync used only when enable_objects:=true.
     output_frame_policy: input_optical_header
     sync_tolerance_sec: 0.010
     sync_wait_sec: 0.100  # hold RGB until matching depth or timeout
     sync_queue_size: 10
-    max_observation_age_sec: 0.500  # drop outputs older than this (source stamp)
+    # Drop outputs older than this (source stamp), checked pre- and post-inference.
+    max_observation_age_sec: 0.500
     min_depth_m: 0.5
     max_depth_m: 1.5
     mask_erode_kernel: 3

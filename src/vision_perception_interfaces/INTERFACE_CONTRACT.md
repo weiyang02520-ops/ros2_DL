@@ -17,6 +17,7 @@
 - `position_valid=true` is **not** arm authorization. `ARM_READY` is a status diagnostic field only (`NO` until an arm stage is authorized).
 - Default runtime keeps `enable_objects:=false` (V1 path: detections only, no `/objects`).
 - With `mode:=v1_ros` and `enable_objects:=true`, the node may publish `/dg/vision/objects` after depth + CameraInfo pairing. Missing depth/calibration → `position_valid=false` / `DEPTH_UNPAIRED` (or status degrade); never forge 3D.
+- Invalid detections are **retained** with NaN positions and an `invalid_reason`. Do not drop failures, do not write `0` or a previous XYZ as a successful fallback.
 - V2 (tracking off): `object_id` and `tracking_session_id` empty; `tracking_valid=false`.
 - V3 (`enable_tracking:=true`, `mode:=v1_ros` only): confirmed matches get non-empty
   `object_id` and `tracking_valid=true` within `tracking_session_id` on
@@ -24,8 +25,42 @@
   `VisionDetection2D` does not carry `object_id`. Tentative / unmatched stay empty
   + false. STALE / calibration change / clock rollback mint a new session; expired
   IDs are never reused. Matcher: deterministic greedy per-class IoU (not Hungarian).
-  No ReID / cross-restart identity.
+  No ReID / cross-restart identity. Tracking must **not** copy an old valid XYZ onto
+  a currently unpaired/invalid observation.
 - Consumers of legacy `/perception/localized_objects` are out of scope; this package does not replace them silently.
+
+## `source_kind` (W1)
+
+| Value | Meaning |
+|---|---|
+| `LIVE_CAMERA` | Real camera stream (e.g. ZED subscribe profile) |
+| `RECORDED_CAMERA` | Bag / recorded replay |
+| `SYNTHETIC_DEV` | Fake / synthetic publishers (`/dg/vision/fake/...`, `input_profile:=fake_dev`) |
+| `OFFLINE_FILE` | Offline CLI file input |
+
+Fake streams **must not** be labeled `LIVE_CAMERA`. Auto-resolution uses `input_profile` and `rgb_topic`; explicit `source_kind` overrides when set.
+
+## Freshness (W1)
+
+- `max_observation_age_sec` (default 0.500) is applied to the **source RGB stamp**.
+- Age is checked **before inference** and again **after inference**, before publish.
+- Over-age observations are dropped (counted in status `observations_dropped_age` /
+  `observations_dropped_age_post_infer`); they are not published as fresh.
+
+## Mask / depth quality (W2)
+
+`invalid_reason` values (keep at least):
+
+`OK`, `DEPTH_UNPAIRED`, `MASK_TOO_SMALL`, `MASK_DEGRADED`, `DEPTH_INSUFFICIENT`,
+`DEPTH_DISCONTINUITY`, `INPUT_INVALID`, `STALE`.
+
+- `MASK_DEGRADED`: instance mask missing or size-mismatched, and
+  `allow_bbox_mask_fallback:=false` (ZED delivery profile default).
+- When fallback is allowed (fake_dev), bbox sampling may proceed but status exposes
+  `last_mask_source` / `last_mask_degraded_count`.
+- RGB / depth / CameraInfo size or frame mismatches → `INPUT_INVALID` (no forged XYZ).
+- Transparent / reflective bottle-cup depth is **not** promised; treat as route B
+  (opaque baseline vs transparent pending). Detection ≠ reliable surface depth.
 
 ## Runtime gates (vision_perception package)
 
@@ -39,6 +74,10 @@
   - Fake smoke: `/dg/vision/fake/depth` + `/dg/vision/fake/camera_info` via `use_fake_depth:=true`.
     Depth timer is stamp master; fake RGB copies depth stamps (`stamp_source_topic`).
     Node waits up to `sync_wait_sec` (default 0.100) for a match (`sync_tolerance_sec` 0.010).
+- Sensor subscriptions default to **BEST_EFFORT** QoS (`image_qos_reliability`).
+- Profiles:
+  - `config/profiles/zed_subscribe.yaml` + `vision_zed_subscribe.launch.py`
+  - `config/profiles/fake_dev.yaml` (SYNTHETIC_DEV)
 
 ## Evidence shells
 
@@ -52,3 +91,28 @@ not need the monorepo `evidence/` tree.
 No in-repo subscriber to `vision_perception_interfaces/VisionObject*` was found
 when this contract was finalized. If one appears before V2, pause and
 re-authorize interface changes.
+
+## W5 target transform (`/dg/vision/objects_target`)
+
+Optional independent node `vision_object_transform_node` (default **disabled**):
+
+| Topic | Message | Notes |
+|---|---|---|
+| `/dg/vision/objects` (in) | `VisionObjectArray` | Camera optical observations (unchanged) |
+| `/dg/vision/objects_target` (out) | `VisionObjectArray` | Same shape; `header.frame_id` = `target_frame` |
+| `/dg/vision/transform_status` | `DiagnosticArray` | enabled/mode/reason; `publishes_tf=false` |
+
+Semantics:
+
+- `p_target = R_target_from_source * p_source + t` (metres).
+- Source-invalid objects stay invalid (same reason, NaN); TF cannot flip them valid.
+- Missing/expired TF or missing extrinsics → keep object, `position_valid=false`,
+  `invalid_reason=INPUT_INVALID` (details in transform status).
+- No identity / last-TF / last-pose fallback. No formal TF publish. No motion.
+- `bbox` / `reference_u` / `reference_v` remain **source image pixels**.
+- `orientation_valid` always false (extrinsics ≠ object orientation).
+
+## Still unauthorized
+
+Motion commands, Nav2 goals, `/initialpose`, and formal TF **publish** remain
+out of scope for this package.

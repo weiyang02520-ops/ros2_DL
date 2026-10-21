@@ -9,12 +9,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Tuple
 
-from vision_perception.types import ALLOWED_CLASSES, ModelManifest
+from vision_perception.source_qos import normalize_qos_reliability
+from vision_perception.types import (
+    ALLOWED_CLASSES,
+    ALLOWED_SOURCE_KINDS,
+    ModelManifest,
+    resolve_observation_source_kind,
+)
 
 
 CAMERA_CONTRACT_NOT_RUN = "NOT_RUN"
 CAMERA_CONTRACT_DEV_WEBCAM = "DEV_WEBCAM_ONLY"
 CAMERA_CONTRACT_NOT_ZED = "NOT_ZED"
+# Subscribe-only contract: consume existing ZED topics; never start SDK/driver.
+CAMERA_CONTRACT_ZED_SUBSCRIBE = "ZED_TOPIC_SUBSCRIBE_ONLY"
+CAMERA_CONTRACT_NOT_START_SDK = "NOT_START_SDK"
+
+ALLOWED_INPUT_PROFILES = frozenset(
+    {"default", "fake_dev", "zed_subscribe", "recorded"}
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +87,17 @@ class VisionConfig:
     video_device: int = 0
     image_frame_id: str = "webcam_optical_frame"
     camera_contract: str = CAMERA_CONTRACT_NOT_RUN
+    # Input provenance profile: default | fake_dev | zed_subscribe | recorded.
+    input_profile: str = "default"
+    # Empty → auto from input_profile / rgb_topic (fake never becomes LIVE_CAMERA).
+    source_kind: str = ""
+    # Sensor subscription reliability (ZED drivers are typically best_effort).
+    image_qos_reliability: str = "best_effort"
+    # When false, reject bbox_fill depth sampling (qualified 3D / ZED delivery).
+    allow_bbox_mask_fallback: bool = True
+    # Hard-reject RGB/depth/CameraInfo geometry mismatches.
+    require_rgb_depth_same_size: bool = True
+    require_depth_calib_same_frame: bool = True
 
 
 DEFAULTS = VisionConfig()
@@ -219,9 +243,37 @@ def vision_config_from_mapping(raw: Mapping[str, Any] | None = None) -> VisionCo
         video_device=int(data.get("video_device", DEFAULTS.video_device)),
         image_frame_id=str(data.get("image_frame_id", DEFAULTS.image_frame_id)),
         camera_contract=str(data.get("camera_contract", DEFAULTS.camera_contract)),
+        input_profile=str(data.get("input_profile", DEFAULTS.input_profile)),
+        source_kind=str(data.get("source_kind", DEFAULTS.source_kind)),
+        image_qos_reliability=str(
+            data.get("image_qos_reliability", DEFAULTS.image_qos_reliability)
+        ),
+        allow_bbox_mask_fallback=_as_bool(
+            data.get("allow_bbox_mask_fallback", DEFAULTS.allow_bbox_mask_fallback)
+        ),
+        require_rgb_depth_same_size=_as_bool(
+            data.get(
+                "require_rgb_depth_same_size", DEFAULTS.require_rgb_depth_same_size
+            )
+        ),
+        require_depth_calib_same_frame=_as_bool(
+            data.get(
+                "require_depth_calib_same_frame",
+                DEFAULTS.require_depth_calib_same_frame,
+            )
+        ),
     )
     validate_vision_config(cfg)
     return cfg
+
+
+def resolved_source_kind(cfg: VisionConfig) -> str:
+    """Effective source_kind for observations published by this config."""
+    return resolve_observation_source_kind(
+        explicit=cfg.source_kind,
+        input_profile=cfg.input_profile,
+        rgb_topic=cfg.rgb_topic,
+    )
 
 
 def validate_vision_config(cfg: VisionConfig) -> None:
@@ -287,6 +339,21 @@ def validate_vision_config(cfg: VisionConfig) -> None:
         raise ValueError("tracker_confirm_hits must be >= 1")
     if cfg.tracker_lost_timeout_sec <= 0:
         raise ValueError("tracker_lost_timeout_sec must be > 0")
+    profile = str(cfg.input_profile or "").strip().lower()
+    if profile not in ALLOWED_INPUT_PROFILES:
+        raise ValueError(
+            f"input_profile must be one of {sorted(ALLOWED_INPUT_PROFILES)}, "
+            f"got {cfg.input_profile!r}"
+        )
+    normalize_qos_reliability(cfg.image_qos_reliability)
+    if cfg.source_kind:
+        if cfg.source_kind not in ALLOWED_SOURCE_KINDS:
+            raise ValueError(
+                f"source_kind must be one of {ALLOWED_SOURCE_KINDS}, "
+                f"got {cfg.source_kind!r}"
+            )
+    # Ensure auto-resolution is valid for the chosen profile/topic.
+    resolved_source_kind(cfg)
     if cfg.mode == "skeleton":
         if (
             cfg.detector_enabled
@@ -335,14 +402,43 @@ def validate_vision_config(cfg: VisionConfig) -> None:
             if not cfg.camera_info_topic:
                 raise ValueError("enable_objects=true requires camera_info_topic")
         contract = cfg.camera_contract.upper()
-        if "DEV_WEBCAM_ONLY" not in contract:
-            raise ValueError(
-                "v1_ros camera_contract must include DEV_WEBCAM_ONLY "
-                "(ZED contract is not authorized in this stage)"
+        is_dev_webcam = "DEV_WEBCAM_ONLY" in contract
+        is_zed_subscribe = (
+            CAMERA_CONTRACT_ZED_SUBSCRIBE in contract
+            and (
+                CAMERA_CONTRACT_NOT_START_SDK in contract
+                or "NOT_START_SDK" in contract.replace(" ", "_")
             )
-        if "ZED" in contract and "NOT_ZED" not in contract and "NOT ZED" not in contract:
+        )
+        if not is_dev_webcam and not is_zed_subscribe:
             raise ValueError(
-                "v1_ros must not claim a ZED camera_contract; use DEV_WEBCAM_ONLY / NOT_ZED"
+                "v1_ros camera_contract must be "
+                "'DEV_WEBCAM_ONLY / NOT_ZED' (dev/fake) or "
+                "'ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK' (subscribe existing "
+                "ZED topics only; never start SDK/driver)"
+            )
+        if is_zed_subscribe:
+            # Reject contracts that claim verified live accuracy without measurement.
+            if "ZED_VERIFIED" in contract or "LIVE_VERIFIED" in contract:
+                raise ValueError(
+                    "v1_ros must not claim ZED_VERIFIED; use "
+                    "ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK"
+                )
+            if profile not in {"zed_subscribe", "default"}:
+                raise ValueError(
+                    "ZED_TOPIC_SUBSCRIBE_ONLY requires input_profile="
+                    "zed_subscribe (or default with explicit ZED topics)"
+                )
+        if (
+            is_dev_webcam
+            and "ZED" in contract
+            and "NOT_ZED" not in contract
+            and "NOT ZED" not in contract
+            and CAMERA_CONTRACT_ZED_SUBSCRIBE not in contract
+        ):
+            raise ValueError(
+                "v1_ros DEV_WEBCAM path must not claim a live ZED camera_contract; "
+                "use DEV_WEBCAM_ONLY / NOT_ZED or ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK"
             )
     else:
         if cfg.enable_objects:

@@ -84,3 +84,19 @@ def test_bootstrap_isolated_ws_script_exists():
     assert "set +u" in text
     assert "set -u" in text
     assert "evidence/templates" in text
+
+
+def test_run_vision_stage_sources_setup_under_nounset():
+    """Perception preview must source install/setup.bash safely with `set -u`."""
+    path = SCRIPTS / "vision_delivery" / "Run-VisionStage.sh"
+    assert path.is_file()
+    data = path.read_bytes()
+    assert b"\r" not in data
+    text = data.decode("utf-8")
+    assert "source_ros_setup" in text
+    assert "COLCON_TRACE" in text
+    assert "set +u" in text
+    assert "need_ros" in text
+    # Direct `source .../setup.bash` under nounset is the stage0 failure mode.
+    assert "source_ros_setup /opt/ros/humble/setup.bash" in text
+    assert 'source_ros_setup "$WS/install/setup.bash"' in text
