@@ -18,7 +18,11 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
-from vision_perception.fake_image_source import load_fake_rgb, resolve_fake_image_path
+from vision_perception.fake_image_source import (
+    load_fake_rgb,
+    match_rgb_to_hw,
+    resolve_fake_image_path,
+)
 
 
 class FakeImagePublisherNode(Node):
@@ -84,16 +88,17 @@ class FakeImagePublisherNode(Node):
                 "stamp_source_topic:=/dg/vision/fake/depth with use_fake_depth."
             )
 
-    def _publish_rgb(self, stamp, frame_id: str) -> None:
+    def _publish_rgb(self, stamp, frame_id: str, rgb=None) -> None:
+        frame = self._rgb if rgb is None else rgb
         msg = Image()
         msg.header.stamp = stamp
         msg.header.frame_id = frame_id or self._frame_id
-        msg.height = int(self._rgb.shape[0])
-        msg.width = int(self._rgb.shape[1])
+        msg.height = int(frame.shape[0])
+        msg.width = int(frame.shape[1])
         msg.encoding = "rgb8"
         msg.is_bigendian = 0
         msg.step = int(msg.width * 3)
-        msg.data = self._rgb.tobytes()
+        msg.data = frame.tobytes()
         self._pub.publish(msg)
 
     def _tick(self):
@@ -101,8 +106,10 @@ class FakeImagePublisherNode(Node):
 
     def _on_stamp_source(self, src: Image) -> None:
         # Prefer source frame_id when present so RGB/depth/info share optical frame.
+        # Match depth HxW so V2 require_rgb_depth_same_size can succeed on fake smoke.
         frame_id = str(src.header.frame_id) or self._frame_id
-        self._publish_rgb(src.header.stamp, frame_id)
+        rgb = match_rgb_to_hw(self._rgb, int(src.height), int(src.width))
+        self._publish_rgb(src.header.stamp, frame_id, rgb=rgb)
 
 
 def main(args=None):
@@ -119,9 +126,15 @@ def main(args=None):
         exit_code = 1
     finally:
         if node is not None:
-            node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+            try:
+                node.destroy_node()
+            except (KeyboardInterrupt, ExternalShutdownException):
+                pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
     if exit_code != 0:
         sys.exit(exit_code)
 

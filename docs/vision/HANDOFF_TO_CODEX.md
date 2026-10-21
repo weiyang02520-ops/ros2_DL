@@ -9,11 +9,26 @@
 | 范围 | W1–W7 软件 + §11 可云端交付物；**实机仍 NOT_RUN** |
 | 硬约束 | 不改 ZED SDK/驱动、Nav2、底盘、机械臂、生产服务/软链；无运动/`/initialpose`/正式 TF 发布 |
 
-姊妹文档：[`DELIVERY_SCOPE.md`](./DELIVERY_SCOPE.md) · [`ARM64_DEPENDENCY_PLAN.md`](./ARM64_DEPENDENCY_PLAN.md) · [`delivery/`](./delivery/) · 历史 [`W1_W4_HANDOFF.md`](./W1_W4_HANDOFF.md) · [`LOCAL_HANDOFF.md`](./LOCAL_HANDOFF.md)
+姊妹文档：[`DELIVERY_SCOPE.md`](./DELIVERY_SCOPE.md) · [`ARM64_DEPENDENCY_PLAN.md`](./ARM64_DEPENDENCY_PLAN.md) · [`delivery/`](./delivery/) · [`STAGE0_FIX_NOTES.md`](./STAGE0_FIX_NOTES.md) · 历史 [`W1_W4_HANDOFF.md`](./W1_W4_HANDOFF.md) · [`LOCAL_HANDOFF.md`](./LOCAL_HANDOFF.md)
 
 ---
 
 ## ① 全部改动与未完成项
+
+### 阶段 0 本机缺陷修复（本轮，基线 `181d1fd` 之上）
+
+详见 [`STAGE0_FIX_NOTES.md`](./STAGE0_FIX_NOTES.md)。摘要：
+
+| 项 | 改动 |
+|---|---|
+| Perception `COLCON_TRACE` | `Run-VisionStage.sh` → `source_ros_setup`（`set -u` 安全 source） |
+| skeleton SIGINT -2 | `vision_node` / fake_* / webcam / transform `main` 收尾吞 `KeyboardInterrupt` |
+| 合成可靠 3D | 假 RGB 对齐深度 HxW；fake launch `reliable` QoS；CameraInfo 短 defer；e2e 多样本 `position_valid` |
+| 文档 | 本文件 + `STAGE0_FIX_NOTES.md` |
+
+**本机复验：** `Run-VisionStage.sh Perception`；`timeout 8 … mode:=skeleton`；`docker_humble_e2e_synthetic_smoke.sh`（期望 `E2E_SYNTHETIC_RELIABLE_3D_OK`，仍标 SYNTHETIC）。
+
+**`ready_for_window_a`：** 上述三项本机复验通过后，仍须用户授权上电/已审相机/短采集才可置 true；未授权前保持 false。
 
 ### 已完成（软件）
 
@@ -77,7 +92,7 @@
 - W5 **实机**外参/TF 与 `/objects_target` 精度
 - 透明路线 B 实测
 - 填写 `current_robot.yaml` 实测字段与 ACCEPTANCE 真值表
-- 合成 e2e 中 `DEPTH_UNPAIRED` 若需 `position_valid`：本机用真深度或修好假流 stamp 再验（非实机 PASS）
+- 合成可靠 3D：软件侧已修假流对齐/采样；**本机 Docker 复验**通过后仍只标 SYNTHETIC（≠ 实机 PASS）
 - 合并 `main` / 生产部署（禁止，除非用户另批）
 
 > 云端已完成：公开 YOLO11n-seg ONNX 导出 + SHA 文档；Docker 真 ONNX 假流 e2e（SYNTHETIC）；QEMU arm64 依赖/构建/pytest。本机阶段 0 **不必再导出模型**（除非复现 SHA 失败），只需拷贝/复现到 `$HOME/vision_models/`。
@@ -93,7 +108,7 @@
 | `pytest`（`src/vision_perception/test`） | **150 passed**（含 Pose2D 布局兼容） | SOFTWARE_CHECKED |
 | `bash scripts/docker_humble_smoke.sh` | `colcon` 两包；launch `--show-args`；`mode:=skeleton`；容器 pytest；`DOCKER_SMOKE_OK` | SOFTWARE_CHECKED |
 | Ultralytics 导出 YOLO11n-seg ONNX | 输入 `1x3x640x640`；`output0 1x116x8400` + `output1 1x32x160x160`；SHA 见 `MODEL_EXPORT_REPRO.md` | SOFTWARE_CHECKED |
-| `bash scripts/docker_humble_e2e_synthetic_smoke.sh` | 真 ONNX + COCO 样例假流；`detections_2d` 3×bottle；`source_kind=SYNTHETIC_DEV`；objects 保留但 `DEPTH_UNPAIRED`；`E2E_SYNTHETIC_SMOKE_OK` | **SYNTHETIC**（非实机 PASS） |
+| `bash scripts/docker_humble_e2e_synthetic_smoke.sh` | 真 ONNX + COCO 样例假流；期望 `SYNTHETIC_DEV` + 多样本采到 `position_valid=true` → `E2E_SYNTHETIC_RELIABLE_3D_OK`（阶段 0 修复后） | **SYNTHETIC**（非实机 PASS） |
 | `bash scripts/docker_arm64_qemu_smoke.sh` | `arm64v8/ros:humble` + binfmt；`requirements-arm64.txt` 可装；colcon 两包；pytest 150；`ARM64_QEMU_SMOKE_OK` | SOFTWARE_CHECKED（**≠ Jetson**） |
 | 真相机 / Jetson 板载 RUN | **未跑** | NOT_RUN |
 

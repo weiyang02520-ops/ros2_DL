@@ -24,6 +24,7 @@ sudo docker run --rm \
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export AMENT_TRACE_SETUP_FILES=
+export COLCON_TRACE=
 apt-get update -qq
 apt-get install -y -qq \
   python3-pip python3-colcon-common-extensions \
@@ -51,6 +52,7 @@ MAN='"$ART_IN_DOCKER"'/model_manifest.json
 IMG='"$ART_IN_DOCKER"'/sample_bottle_cup.jpg
 
 # background launch: fake RGB+depth + V2 objects
+# stamp sync: depth timer master; RGB copies depth stamp + HxW (see launch).
 ros2 launch vision_perception vision.launch.py \
   mode:=v1_ros \
   use_fake_image:=true \
@@ -64,7 +66,21 @@ ros2 launch vision_perception vision.launch.py \
   camera_contract:="DEV_WEBCAM_ONLY / NOT_ZED" \
   >/tmp/e2e_launch.log 2>&1 &
 LPID=$!
-cleanup() { kill $LPID 2>/dev/null || true; wait $LPID 2>/dev/null || true; }
+cleanup() {
+  if kill -0 "$LPID" 2>/dev/null; then
+    kill -INT "$LPID" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      kill -0 "$LPID" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$LPID" 2>/dev/null; then
+      kill -TERM "$LPID" 2>/dev/null || true
+      wait "$LPID" 2>/dev/null || true
+    else
+      wait "$LPID" 2>/dev/null || true
+    fi
+  fi
+}
 trap cleanup EXIT
 
 # wait for topics
@@ -84,21 +100,52 @@ timeout 10 ros2 topic echo /dg/vision/status --once 2>/dev/null | tee /tmp/e2e_s
 echo "=== detections_2d once ==="
 timeout 15 ros2 topic echo /dg/vision/detections_2d --once 2>/dev/null | tee /tmp/e2e_det.txt || true
 
-echo "=== objects once ==="
-timeout 15 ros2 topic echo /dg/vision/objects --once 2>/dev/null | tee /tmp/e2e_obj.txt || true
+# Sample several /objects messages; status and objects are different topics/frames.
+# Require at least one same-batch reliable 3D (position_valid=true) for synthetic PASS.
+: > /tmp/e2e_obj.txt
+: > /tmp/e2e_obj_best.txt
+echo "=== objects sample (up to 12) ==="
+for i in $(seq 1 12); do
+  timeout 8 ros2 topic echo /dg/vision/objects --once 2>/dev/null | tee /tmp/e2e_obj_last.txt || true
+  cat /tmp/e2e_obj_last.txt >> /tmp/e2e_obj.txt
+  if grep -q "position_valid: true" /tmp/e2e_obj_last.txt 2>/dev/null; then
+    cp /tmp/e2e_obj_last.txt /tmp/e2e_obj_best.txt
+    echo "FOUND_VALID_3D sample=$i"
+    break
+  fi
+  sleep 0.3
+done
+if [[ ! -s /tmp/e2e_obj_best.txt ]]; then
+  cp /tmp/e2e_obj_last.txt /tmp/e2e_obj_best.txt 2>/dev/null || true
+fi
 
 python3 - <<'"'"'PY'"'"'
 from pathlib import Path
-status=Path("/tmp/e2e_status.txt").read_text(errors="replace")
-det=Path("/tmp/e2e_det.txt").read_text(errors="replace")
-obj=Path("/tmp/e2e_obj.txt").read_text(errors="replace")
+import re
+
+status = Path("/tmp/e2e_status.txt").read_text(errors="replace")
+det = Path("/tmp/e2e_det.txt").read_text(errors="replace")
+obj_all = Path("/tmp/e2e_obj.txt").read_text(errors="replace")
+obj = Path("/tmp/e2e_obj_best.txt").read_text(errors="replace") if Path("/tmp/e2e_obj_best.txt").is_file() else obj_all
+
 print("CHECK source_kind_SYNTHETIC", "SYNTHETIC_DEV" in status or "SYNTHETIC_DEV" in det or "SYNTHETIC_DEV" in obj)
 print("CHECK not_LIVE_as_only", "LIVE_CAMERA" not in det.split("source_kind")[-1][:40] if "source_kind" in det else "n/a")
 print("CHECK has_detections_field", "detections:" in det or "class_name:" in det)
 print("CHECK has_objects_field", "objects:" in obj or "position_valid:" in obj)
-# soft asserts for pipeline plumbing
+
 assert "SYNTHETIC_DEV" in status or "SYNTHETIC_DEV" in det or "SYNTHETIC_DEV" in obj, "expected SYNTHETIC_DEV"
-assert "LIVE_CAMERA" not in (det+obj) or "SYNTHETIC_DEV" in (det+obj), "fake must not claim LIVE alone"
+assert "LIVE_CAMERA" not in (det + obj) or "SYNTHETIC_DEV" in (det + obj), "fake must not claim LIVE alone"
+
+valid = len(re.findall(r"position_valid:\s*true", obj, flags=re.I))
+pair_ok = ("pair_reason: OK" in obj) or ("pair_reason: \"OK\"" in obj) or ("DEPTH_UNPAIRED" not in obj and valid > 0)
+print(f"CHECK position_valid_true_count={valid}")
+print(f"CHECK pair_ok_hint={pair_ok}")
+# Reliable 3D on synthetic: at least one position_valid without relaxing gates.
+assert valid >= 1, (
+    "synthetic reliable 3D failed: no position_valid=true in sampled /objects "
+    "(still SYNTHETIC, not live PASS). See e2e_obj dump."
+)
 print("E2E_SYNTHETIC_SMOKE_OK")
+print("E2E_SYNTHETIC_RELIABLE_3D_OK")
 PY
 '

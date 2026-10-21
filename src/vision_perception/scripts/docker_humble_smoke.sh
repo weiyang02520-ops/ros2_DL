@@ -17,6 +17,7 @@ sudo docker run --rm \
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export AMENT_TRACE_SETUP_FILES=
+export COLCON_TRACE=
 apt-get update -qq
 apt-get install -y -qq \
   python3-pip python3-colcon-common-extensions \
@@ -43,12 +44,15 @@ bash src/vision_perception/scripts/check_ament_prefix_hook.sh
 ros2 launch vision_perception vision.launch.py --show-args | head -40
 ros2 launch vision_perception vision_zed_subscribe.launch.py --show-args | head -20
 ros2 launch vision_perception vision_object_transform.launch.py --show-args | head -20
+# Perception preview path under nounset (stage0 COLCON_TRACE regression)
+bash src/vision_perception/scripts/vision_delivery/Run-VisionStage.sh Perception --ws=/tmp/vp_ws
 # skeleton smoke (no camera / no model)
 set +e
 timeout 8 ros2 launch vision_perception vision.launch.py mode:=skeleton
 SMOKE_EC=$?
 set -e
 echo "skeleton_launch_exit=$SMOKE_EC"
+# Accept timeout(124) or clean signal exits; reject node -2 style failures if captured.
 cd '"$WS_IN_DOCKER"'/src/vision_perception && python3 -m pytest test/ -q --tb=line
 echo DOCKER_SMOKE_OK
 '

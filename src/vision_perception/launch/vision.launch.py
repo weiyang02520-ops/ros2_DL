@@ -125,7 +125,10 @@ def _vision_node_parameters(*, depth_topic: str, camera_info_topic: str, use_syn
         "source_kind": "SYNTHETIC_DEV" if use_synthetic else "",
     }
     if use_synthetic:
+        # Match fake publishers (default RELIABLE) so depth/RGB/info are not
+        # silently dropped under BEST_EFFORT → intermittent DEPTH_UNPAIRED.
         overlay["allow_bbox_mask_fallback"] = True
+        overlay["image_qos_reliability"] = "reliable"
     return [LaunchConfiguration("params_file"), overlay]
 
 

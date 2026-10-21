@@ -19,8 +19,9 @@
 |---|---|
 | `source_kind` | `SYNTHETIC_DEV`（非 LIVE_CAMERA） |
 | `/dg/vision/detections_2d` | 3× `bottle`（conf≈0.66/0.61/0.40） |
-| `/dg/vision/objects` | 3 条保留；`position_valid=false`，`DEPTH_UNPAIRED`（假流 stamp 同步未在当次 echo 窗口配上；检测管线已通） |
+| `/dg/vision/objects` | 历史：曾出现 3 条 `DEPTH_UNPAIRED`（原生 RGB 尺寸≠假深度、BEST_EFFORT 丢帧、CameraInfo 竞态、`--once` 不同帧）。阶段 0 修复后应对齐 HxW + reliable QoS + CameraInfo defer + 多样本，期望 `position_valid=true`（仍 SYNTHETIC） |
 | Pose2D 发布 | 曾失败（vision_msgs 4.1 `position.x`）；已修 `_fill_vision_pose2d` 兼容 |
+| 阶段 0 修复 | 见 [`../STAGE0_FIX_NOTES.md`](../STAGE0_FIX_NOTES.md)；脚本现断言 `E2E_SYNTHETIC_RELIABLE_3D_OK` |
 
 ## Artifacts（不进 git）
 

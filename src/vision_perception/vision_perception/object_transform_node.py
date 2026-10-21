@@ -370,9 +370,15 @@ def main(args=None):
         code = 1
     finally:
         if node is not None:
-            node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+            try:
+                node.destroy_node()
+            except (KeyboardInterrupt, ExternalShutdownException):
+                pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
     if code:
         sys.exit(code)
 

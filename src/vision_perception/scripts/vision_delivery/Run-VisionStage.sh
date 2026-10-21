@@ -40,14 +40,29 @@ Default is preview. Pass --execute to run. No All step.
 EOF
 }
 
+# Humble/colcon setup.bash references optional vars (COLCON_TRACE,
+# AMENT_TRACE_SETUP_FILES, …) that trip `set -u`. Source with nounset off.
+source_ros_setup() {
+  local setup_file="$1"
+  if [[ ! -f "${setup_file}" ]]; then
+    return 1
+  fi
+  # Pre-define common optional vars so nested scripts stay safe under nounset.
+  export COLCON_TRACE="${COLCON_TRACE:-}"
+  export AMENT_TRACE_SETUP_FILES="${AMENT_TRACE_SETUP_FILES:-}"
+  export AMENT_PYTHON_EXECUTABLE="${AMENT_PYTHON_EXECUTABLE:-}"
+  set +u
+  # shellcheck disable=SC1090
+  source "${setup_file}"
+  set -u
+}
+
 need_ros() {
   if [[ -z "${ROS_DISTRO:-}" ]]; then
-    # shellcheck disable=SC1091
-    source /opt/ros/humble/setup.bash
+    source_ros_setup /opt/ros/humble/setup.bash
   fi
   if [[ -f "$WS/install/setup.bash" ]]; then
-    # shellcheck disable=SC1091
-    source "$WS/install/setup.bash"
+    source_ros_setup "$WS/install/setup.bash"
   fi
 }
 

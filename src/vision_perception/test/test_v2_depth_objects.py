@@ -351,6 +351,46 @@ def test_object_batch_paired_valid_position_and_calibration_id():
     assert payload["arm_ready"] == "NO"
 
 
+def test_object_batch_size_mismatch_keeps_invalid_not_forged():
+    """Native RGB vs fixed fake-depth plane must not invent XYZ (INPUT_INVALID)."""
+    h, w = 480, 640
+    depth_m = np.full((h, w), 1.0, dtype=np.float32)
+    depth = decode_depth_image(
+        depth_m.tobytes(),
+        height=h,
+        width=w,
+        encoding="32FC1",
+        stamp_sec=10,
+        stamp_nanosec=0,
+        frame_id="fake_optical",
+    )
+    calib = camera_calibration_from_pinhole(
+        width=w, height=h, fx=500.0, fy=500.0, cx=320.0, cy=240.0, frame_id="fake_optical"
+    )
+    batch = _batch_with_box()
+    # Simulate detection metadata from a native-resolution fake RGB (e.g. 120x160).
+    batch = DetectionBatch(
+        key=batch.key,
+        detections=batch.detections,
+        image_width=160,
+        image_height=120,
+    )
+    objects = build_object_batch(
+        batch,
+        depth=depth,
+        calibration=calib,
+        pair_skew_sec=0.0,
+        pair_reason="OK",
+        require_rgb_depth_same_size=True,
+    )
+    assert objects.depth_paired is True
+    assert objects.pair_reason == "OK"
+    assert objects.registration_reason == "INPUT_INVALID"
+    assert objects.objects[0].position_valid is False
+    assert objects.objects[0].invalid_reason == "INPUT_INVALID"
+    assert is_nan_number(objects.objects[0].position_xyz[0])
+
+
 def test_object_batch_retains_failed_detections():
     """Every 2D detection gets an object entry even when depth fails."""
     batch = DetectionBatch(

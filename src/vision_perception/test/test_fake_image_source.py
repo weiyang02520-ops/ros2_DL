@@ -6,7 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
-from vision_perception.fake_image_source import load_fake_rgb, resolve_fake_image_path
+from vision_perception.fake_image_source import (
+    load_fake_rgb,
+    match_rgb_to_hw,
+    resolve_fake_image_path,
+)
 
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
@@ -35,6 +39,18 @@ def test_load_fake_rgb_from_committed_hint_npy():
     assert rgb.shape[0] >= 8 and rgb.shape[1] >= 8
 
 
+def test_match_rgb_to_hw_resizes_native_file_to_fake_depth_plane():
+    """COCO/native JPG vs fixed 640x480 fake depth must be matched for V2 size gate."""
+    path = EXAMPLES / "smoke_rgb_hint.npy"
+    rgb, _ = load_fake_rgb(str(path))
+    assert rgb.shape[:2] != (480, 640)
+    matched = match_rgb_to_hw(rgb, 480, 640)
+    assert matched.shape == (480, 640, 3)
+    assert matched.dtype == np.uint8
+    same = match_rgb_to_hw(matched, 480, 640)
+    assert same.shape == (480, 640, 3)
+
+
 def test_launch_declares_fake_image_path():
     text = (
         Path(__file__).resolve().parents[1] / "launch" / "vision.launch.py"
@@ -47,3 +63,7 @@ def test_launch_declares_fake_image_path():
     assert "vision_fake_depth_publisher" in text
     assert "stamp_source_topic" in text
     assert 'rgb_topic": ""' in text or "rgb_topic\": \"\"" in text
+    # Synthetic path must force RELIABLE so fake depth/RGB are not dropped.
+    assert 'image_qos_reliability"] = "reliable"' in text or (
+        '"image_qos_reliability": "reliable"' in text
+    )

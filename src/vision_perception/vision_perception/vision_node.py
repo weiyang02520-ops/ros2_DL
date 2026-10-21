@@ -209,6 +209,9 @@ class VisionPerceptionNode(Node):
         self._depth_buffer: Optional[DepthFrameBuffer] = None
         self._sync_gate: Optional[RgbDepthSyncGate[DecodedImage]] = None
         self._sync_poll_timer = None
+        self._sync_wait_sec = 0.100
+        self._deferred_synced: Optional[SyncedPair[DecodedImage]] = None
+        self._deferred_synced_deadline = 0.0
         self._calib_lock = threading.Lock()
         self._calibration: Optional[CameraCalibration] = None
         self._camera_info_received = False
@@ -412,13 +415,14 @@ class VisionPerceptionNode(Node):
                 VisionObjectArray, objects_topic, 10
             )
             self._object_output_active = True
+            self._sync_wait_sec = float(cfg.sync_wait_sec)
             self._depth_buffer = DepthFrameBuffer(
                 tolerance_sec=float(cfg.sync_tolerance_sec),
                 max_size=int(cfg.sync_queue_size),
             )
             self._sync_gate = RgbDepthSyncGate(
                 self._depth_buffer,
-                sync_wait_sec=float(cfg.sync_wait_sec),
+                sync_wait_sec=self._sync_wait_sec,
             )
             self._depth_sub = self.create_subscription(
                 Image, cfg.depth_topic, self._on_depth, sensor_qos
@@ -514,6 +518,7 @@ class VisionPerceptionNode(Node):
                     self._depth_buffer.clear()
                 if self._sync_gate is not None:
                     self._sync_gate.clear()
+                self._deferred_synced = None
                 if self._tracker is not None:
                     self._tracking_session_id = self._tracker.reset_session(
                         reason="calibration_change"
@@ -523,36 +528,83 @@ class VisionPerceptionNode(Node):
                 )
             self._calibration = calib
             self._camera_info_received = True
+        # Flush stamp-paired RGB held while CameraInfo was still in flight.
+        self._flush_deferred_synced(time.monotonic())
 
     def _snapshot_calibration(self) -> Optional[CameraCalibration]:
         with self._calib_lock:
             return self._calibration
+
+    def _enqueue_synced_job(
+        self,
+        synced: SyncedPair[DecodedImage],
+        *,
+        calib: Optional[CameraCalibration],
+        pair_reason: str,
+        depth,
+    ) -> None:
+        if self._worker is None:
+            return
+        self._worker.submit(
+            PendingRgbJob(
+                decoded=synced.payload,
+                depth=depth,
+                pair_skew_sec=synced.pair_skew_sec,
+                pair_reason=pair_reason,
+                calibration=calib,
+            )
+        )
+
+    def _flush_deferred_synced(self, now_mono: float) -> None:
+        deferred = self._deferred_synced
+        if deferred is None:
+            return
+        calib = self._snapshot_calibration()
+        if deferred.pair_reason == "OK" and calib is None:
+            if float(now_mono) < float(self._deferred_synced_deadline):
+                return
+            # Timed out waiting for CameraInfo — keep invalid, never forge XYZ.
+            self._deferred_synced = None
+            self._enqueue_synced_job(
+                deferred, calib=None, pair_reason="DEPTH_UNPAIRED", depth=None
+            )
+            return
+        self._deferred_synced = None
+        pair_reason = deferred.pair_reason
+        depth = deferred.depth
+        if pair_reason == "OK" and calib is None:
+            pair_reason = "DEPTH_UNPAIRED"
+            depth = None
+        self._enqueue_synced_job(
+            deferred, calib=calib, pair_reason=pair_reason, depth=depth
+        )
 
     def _submit_synced(self, synced: SyncedPair[DecodedImage]) -> None:
         if self._worker is None:
             return
         depth = synced.depth
         pair_reason = synced.pair_reason
-        pair_skew = synced.pair_skew_sec
         calib = self._snapshot_calibration()
         if pair_reason == "OK" and calib is None:
-            # Paired depth but no CameraInfo yet — do not forge XYZ.
-            pair_reason = "DEPTH_UNPAIRED"
-            depth = None
-        self._worker.submit(
-            PendingRgbJob(
-                decoded=synced.payload,
-                depth=depth,
-                pair_skew_sec=pair_skew,
-                pair_reason=pair_reason,
-                calibration=calib,
+            # Depth stamp paired, but CameraInfo topic may still be in flight
+            # (common on fake smoke where info/depth/RGB are separate pubs).
+            # Hold briefly; do not rewrite to DEPTH_UNPAIRED yet or forge XYZ.
+            self._deferred_synced = synced
+            self._deferred_synced_deadline = (
+                time.monotonic() + max(0.0, float(self._sync_wait_sec))
             )
+            return
+        self._deferred_synced = None
+        self._enqueue_synced_job(
+            synced, calib=calib, pair_reason=pair_reason, depth=depth
         )
 
     def _poll_sync_gate(self) -> None:
+        now_mono = time.monotonic()
+        self._flush_deferred_synced(now_mono)
         if self._sync_gate is None:
             return
-        synced = self._sync_gate.poll(time.monotonic())
+        synced = self._sync_gate.poll(now_mono)
         if synced is not None:
             self._submit_synced(synced)
 
@@ -824,8 +876,12 @@ class VisionPerceptionNode(Node):
         self._status_publisher.publish(message)
 
     def destroy_node(self):
+        self._deferred_synced = None
         if self._sync_poll_timer is not None:
-            self._sync_poll_timer.cancel()
+            try:
+                self._sync_poll_timer.cancel()
+            except (KeyboardInterrupt, ExternalShutdownException):
+                pass
             self._sync_poll_timer = None
         if self._sync_gate is not None:
             self._sync_gate.clear()
@@ -865,10 +921,18 @@ def main(args=None):
         print(f"[vision_perception_node] FATAL: {exc}{hint}", file=sys.stderr)
         exit_code = 1
     finally:
+        # SIGINT/timeout can re-raise KeyboardInterrupt inside destroy_node;
+        # swallow so skeleton smoke exits 0/-15/124 rather than node exit -2.
         if node is not None:
-            node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+            try:
+                node.destroy_node()
+            except (KeyboardInterrupt, ExternalShutdownException):
+                pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
     if exit_code != 0:
         sys.exit(exit_code)
 
