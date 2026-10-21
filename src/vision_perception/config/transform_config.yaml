@@ -1,0 +1,26 @@
+# W5 坐标转换适配器 — 默认 disabled。
+# 无外参/TF 时不得输出有效 target；禁止单位矩阵冒充标定。
+# 只消费 TF 或本地静态外参，不发布正式 TF，不发运动命令。
+#
+# 外参语义：p_target = R_target_from_source * p_source + t_target_from_source（米）
+# quaternion_xyzw / matrix 表示 target←source；translation_m 为源原点在目标系下的坐标。
+
+vision_object_transform_node:
+  ros__parameters:
+    enabled: false
+    mode: static_extrinsics   # static_extrinsics | tf
+    source_frame: ""
+    target_frame: ""
+    extrinsics_id: ""
+    calibration_date: ""
+    source_note: "p_target = R * p_source + t; bbox/reference_u/v remain source pixels"
+    # Leave as 0s while enabled:=false. Enabling without a real calibration
+    # still requires non-empty source/target frames; do not treat zeros as ready.
+    translation_m: [0.0, 0.0, 0.0]
+    quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+    rotation_matrix: []
+    tf_timeout_sec: 0.05
+    objects_input_topic: /dg/vision/objects
+    objects_target_topic: /dg/vision/objects_target
+    status_topic: /dg/vision/transform_status
+    status_rate_hz: 1.0

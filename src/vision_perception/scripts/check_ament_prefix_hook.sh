@@ -57,7 +57,7 @@ if [[ "$PREFIX_HOOK_FOUND" -ne 1 ]]; then
 fi
 
 LIBEXEC="$PREFIX/lib/$PKG"
-for exe in vision_perception_node vision_offline_detect vision_offline_objects vision_offline_track vision_webcam_publisher vision_fake_image_publisher vision_fake_depth_publisher; do
+for exe in vision_perception_node vision_offline_detect vision_offline_objects vision_offline_track vision_webcam_publisher vision_fake_image_publisher vision_fake_depth_publisher vision_object_transform_node vision_subscribe_objects; do
   if [[ ! -x "$LIBEXEC/$exe" ]]; then
     echo "FAIL: missing executable $LIBEXEC/$exe"
     ls -la "$LIBEXEC" 2>/dev/null || true

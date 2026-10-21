@@ -92,7 +92,27 @@ No in-repo subscriber to `vision_perception_interfaces/VisionObject*` was found
 when this contract was finalized. If one appears before V2, pause and
 re-authorize interface changes.
 
-## Out of scope for W1–W4
+## W5 target transform (`/dg/vision/objects_target`)
 
-Coordinate transform adapter (`/dg/vision/objects_target`, W5), motion commands,
-Nav2 goals, `/initialpose`, and formal TF publish remain unauthorized.
+Optional independent node `vision_object_transform_node` (default **disabled**):
+
+| Topic | Message | Notes |
+|---|---|---|
+| `/dg/vision/objects` (in) | `VisionObjectArray` | Camera optical observations (unchanged) |
+| `/dg/vision/objects_target` (out) | `VisionObjectArray` | Same shape; `header.frame_id` = `target_frame` |
+| `/dg/vision/transform_status` | `DiagnosticArray` | enabled/mode/reason; `publishes_tf=false` |
+
+Semantics:
+
+- `p_target = R_target_from_source * p_source + t` (metres).
+- Source-invalid objects stay invalid (same reason, NaN); TF cannot flip them valid.
+- Missing/expired TF or missing extrinsics → keep object, `position_valid=false`,
+  `invalid_reason=INPUT_INVALID` (details in transform status).
+- No identity / last-TF / last-pose fallback. No formal TF publish. No motion.
+- `bbox` / `reference_u` / `reference_v` remain **source image pixels**.
+- `orientation_valid` always false (extrinsics ≠ object orientation).
+
+## Still unauthorized
+
+Motion commands, Nav2 goals, `/initialpose`, and formal TF **publish** remain
+out of scope for this package.

@@ -24,11 +24,14 @@ LIBEXEC_WRAPPERS=(
   vision_webcam_publisher
   vision_fake_image_publisher
   vision_fake_depth_publisher
+  vision_object_transform_node
+  vision_subscribe_objects
 )
 HELPER_SCRIPTS=(
   check_ament_prefix_hook.sh
   bootstrap_isolated_ws.sh
   ensure_scripts_executable.sh
+  vision_delivery/Run-VisionStage.sh
 )
 
 chmod_list() {

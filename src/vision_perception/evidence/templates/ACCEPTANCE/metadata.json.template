@@ -1,0 +1,10 @@
+{
+  "stage": "ACCEPTANCE",
+  "result": "NOT_RUN",
+  "route_A_opaque": "NOT_RUN",
+  "route_B_transparent": "NOT_RUN",
+  "live_camera_observed": "NOT_RUN",
+  "camera_position_measured": "NOT_RUN",
+  "peer_calibration": "NOT_RUN",
+  "notes": "Synthetic/fake results must not be recorded as PASS."
+}

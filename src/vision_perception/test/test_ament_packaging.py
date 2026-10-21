@@ -16,6 +16,8 @@ EXEC_NAMES = (
     "vision_webcam_publisher",
     "vision_fake_image_publisher",
     "vision_fake_depth_publisher",
+    "vision_object_transform_node",
+    "vision_subscribe_objects",
 )
 
 
