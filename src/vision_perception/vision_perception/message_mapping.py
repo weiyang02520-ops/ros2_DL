@@ -280,6 +280,8 @@ def object_batch_to_dict(batch: "ObjectBatch") -> Dict[str, Any]:
         "depth_paired": bool(batch.depth_paired),
         "pair_reason": batch.pair_reason,
         "mask_source": batch.mask_source,
+        "mask_degraded_count": int(getattr(batch, "mask_degraded_count", 0)),
+        "registration_reason": str(getattr(batch, "registration_reason", "OK")),
     }
 
 

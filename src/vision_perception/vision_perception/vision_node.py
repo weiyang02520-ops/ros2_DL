@@ -9,8 +9,12 @@ Optional enable_objects:=true (default false): subscribe depth + CameraInfo,
 Optional enable_tracking:=true (default false, v1_ros only): short-horizon
         2D IoU tracker; fills object_id / tracking_valid when objects on.
 Optional debug_image (default off, ≤2 Hz). mode:=v1 (legacy) remains rejected.
-camera_contract for v1_ros: DEV_WEBCAM_ONLY / NOT_ZED. ARM_READY=NO.
-Does not start ZED SDK or publish grasp / cmd_vel.
+camera_contract for v1_ros:
+  - DEV_WEBCAM_ONLY / NOT_ZED (dev / fake)
+  - ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK (consume existing ZED topics only)
+Fake / synthetic streams publish source_kind=SYNTHETIC_DEV, never LIVE_CAMERA.
+Observation age is checked before and after inference (drop stale, no republish).
+ARM_READY=NO. Does not start ZED SDK or publish grasp / cmd_vel / TF.
 """
 
 from __future__ import annotations
@@ -31,8 +35,10 @@ from vision_perception.config import (
     CAMERA_CONTRACT_NOT_RUN,
     as_bool,
     normalize_ros_node_mode,
+    resolved_source_kind,
     vision_config_from_mapping,
 )
+from vision_perception.source_qos import build_sensor_qos_profile
 from vision_perception.debug_overlay import DebugPublishGate, draw_detections_rgb
 from vision_perception.depth_io import (
     CameraCalibration,
@@ -138,6 +144,12 @@ class VisionPerceptionNode(Node):
             "video_device": 0,
             "image_frame_id": "webcam_optical_frame",
             "camera_contract": CAMERA_CONTRACT_NOT_RUN,
+            "input_profile": "default",
+            "source_kind": "",
+            "image_qos_reliability": "best_effort",
+            "allow_bbox_mask_fallback": True,
+            "require_rgb_depth_same_size": True,
+            "require_depth_calib_same_frame": True,
             "pending_frames": 1,
         }
         for name, default in defaults.items():
@@ -183,6 +195,7 @@ class VisionPerceptionNode(Node):
         self._sync_queue_size = 10
         self._max_observation_age_sec = 0.500
         self._observations_dropped_age = 0
+        self._observations_dropped_age_post_infer = 0
         self._depth_topic = ""
         self._camera_info_topic = ""
         self._input_stale_sec = 1.0
@@ -199,6 +212,15 @@ class VisionPerceptionNode(Node):
         self._calib_lock = threading.Lock()
         self._calibration: Optional[CameraCalibration] = None
         self._camera_info_received = False
+        self._input_profile = "default"
+        self._resolved_source_kind = "LIVE_CAMERA"
+        self._image_qos_reliability = "best_effort"
+        self._allow_bbox_mask_fallback = True
+        self._require_rgb_depth_same_size = True
+        self._require_depth_calib_same_frame = True
+        self._last_mask_source = ""
+        self._last_mask_degraded_count = 0
+        self._last_registration_reason = ""
 
         status_topic = self.get_parameter("status_topic").value
         if not status_topic.startswith("/dg/vision/"):
@@ -263,6 +285,12 @@ class VisionPerceptionNode(Node):
             "video_device",
             "image_frame_id",
             "camera_contract",
+            "input_profile",
+            "source_kind",
+            "image_qos_reliability",
+            "allow_bbox_mask_fallback",
+            "require_rgb_depth_same_size",
+            "require_depth_calib_same_frame",
         ]
         return {name: self.get_parameter(name).value for name in names}
 
@@ -299,16 +327,34 @@ class VisionPerceptionNode(Node):
             self.get_logger().info(f"runtime_dep: {line}")
 
         raw = self._param_map()
-        # Force documented contract label for this stage.
-        if not str(raw.get("camera_contract", "")).strip() or str(
-            raw.get("camera_contract")
-        ) == CAMERA_CONTRACT_NOT_RUN:
-            raw["camera_contract"] = "DEV_WEBCAM_ONLY / NOT_ZED"
+        # Default contract for unspecified/NOT_RUN: DEV webcam. ZED subscribe
+        # profiles must pass an explicit ZED_TOPIC_SUBSCRIBE_ONLY contract.
+        contract_raw = str(raw.get("camera_contract", "")).strip()
+        if not contract_raw or contract_raw == CAMERA_CONTRACT_NOT_RUN:
+            profile = str(raw.get("input_profile", "default")).strip().lower()
+            if profile == "zed_subscribe":
+                raw["camera_contract"] = (
+                    "ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK"
+                )
+            else:
+                raw["camera_contract"] = "DEV_WEBCAM_ONLY / NOT_ZED"
         if not raw.get("detector_enabled"):
             raw["detector_enabled"] = True
         if raw.get("backend") in ("", "unconfigured"):
             raw["backend"] = "onnxruntime_cpu"
         cfg = vision_config_from_mapping(raw)
+        self._resolved_source_kind = resolved_source_kind(cfg)
+        self._last_source_kind = self._resolved_source_kind
+        self._input_profile = str(cfg.input_profile)
+        self._image_qos_reliability = str(cfg.image_qos_reliability)
+        self._allow_bbox_mask_fallback = bool(cfg.allow_bbox_mask_fallback)
+        self._require_rgb_depth_same_size = bool(cfg.require_rgb_depth_same_size)
+        self._require_depth_calib_same_frame = bool(
+            cfg.require_depth_calib_same_frame
+        )
+        sensor_qos = build_sensor_qos_profile(
+            cfg.image_qos_reliability, depth=10
+        )
 
         try:
             from vision_perception_interfaces.msg import VisionDetectionArray
@@ -375,10 +421,10 @@ class VisionPerceptionNode(Node):
                 sync_wait_sec=float(cfg.sync_wait_sec),
             )
             self._depth_sub = self.create_subscription(
-                Image, cfg.depth_topic, self._on_depth, 10
+                Image, cfg.depth_topic, self._on_depth, sensor_qos
             )
             self._info_sub = self.create_subscription(
-                CameraInfo, cfg.camera_info_topic, self._on_camera_info, 10
+                CameraInfo, cfg.camera_info_topic, self._on_camera_info, sensor_qos
             )
             # Poll awaiting RGB timeouts without blocking the executor.
             poll_hz = 50.0
@@ -416,7 +462,7 @@ class VisionPerceptionNode(Node):
         )
         self._worker.start()
         self._image_sub = self.create_subscription(
-            Image, cfg.rgb_topic, self._on_image, 10
+            Image, cfg.rgb_topic, self._on_image, sensor_qos
         )
         if self._enable_tracking:
             self._implementation_status = "V3_TRACKING_DEV"
@@ -432,9 +478,12 @@ class VisionPerceptionNode(Node):
         )
         tracking_note = "; tracking=on" if self._enable_tracking else "; tracking=off"
         self.get_logger().warning(
-            f"v1_ros DEV_WEBCAM_ONLY / NOT_ZED: subscribing {cfg.rgb_topic}, "
+            f"v1_ros contract={self._camera_contract}: "
+            f"profile={self._input_profile} source_kind={self._resolved_source_kind} "
+            f"qos={self._image_qos_reliability}; subscribing {cfg.rgb_topic}, "
             f"publishing {detections_topic}{objects_note}{tracking_note}; "
-            "no ZED SDK start, no cmd_vel; "
+            f"allow_bbox_mask_fallback={self._allow_bbox_mask_fallback}; "
+            "no ZED SDK start, no cmd_vel, no TF publish; "
             "empty detections=[] is healthy for blank fake frames; ARM_READY=NO"
         )
 
@@ -560,6 +609,7 @@ class VisionPerceptionNode(Node):
             calib = None
 
         # Plan §9: never publish observations older than max_observation_age_sec.
+        # Check before inference (queue delay) AND after inference (compute delay).
         now_sec = self.get_clock().now().nanoseconds * 1e-9
         if is_observation_too_old(
             decoded.header.stamp_sec,
@@ -577,10 +627,24 @@ class VisionPerceptionNode(Node):
             frame_id=decoded.header.frame_id,
             stamp_sec=decoded.header.stamp_sec,
             stamp_nanosec=decoded.header.stamp_nanosec,
-            source_kind="LIVE_CAMERA",
+            source_kind=self._resolved_source_kind,
             calibration_id=calib_id,
         )
         self._last_inference_ms = (time.monotonic() - t0) * 1000.0
+
+        # Freshness gap fix: drop if the source stamp aged past the gate during
+        # inference. Do not publish detections/objects that are already stale.
+        now_after = self.get_clock().now().nanoseconds * 1e-9
+        if is_observation_too_old(
+            decoded.header.stamp_sec,
+            decoded.header.stamp_nanosec,
+            now_sec=now_after,
+            max_observation_age_sec=self._max_observation_age_sec,
+        ):
+            self._observations_dropped_age += 1
+            self._observations_dropped_age_post_infer += 1
+            return
+
         self._last_observation_id = int(batch.key.observation_id)
         self._last_detection_count = len(batch.detections)
         self._last_source_kind = batch.key.source_kind
@@ -619,6 +683,9 @@ class VisionPerceptionNode(Node):
                 min_valid_depth_fraction=self._min_valid_depth_fraction,
                 max_depth_mad_m=self._max_depth_mad_m,
                 max_depth_spread_m=self._max_depth_spread_m,
+                allow_bbox_mask_fallback=self._allow_bbox_mask_fallback,
+                require_rgb_depth_same_size=self._require_rgb_depth_same_size,
+                require_depth_calib_same_frame=self._require_depth_calib_same_frame,
             )
             if track_assignments:
                 objects = apply_track_assignments(
@@ -632,6 +699,9 @@ class VisionPerceptionNode(Node):
             )
             self._last_pair_reason = objects.pair_reason
             self._last_pair_skew_sec = objects.pair_skew_sec
+            self._last_mask_source = objects.mask_source
+            self._last_mask_degraded_count = int(objects.mask_degraded_count)
+            self._last_registration_reason = objects.registration_reason
             if objects.calibration_id:
                 self._last_calibration_id = objects.calibration_id
             self._objects_pub.publish(try_build_vision_object_array_msg(objects))
@@ -735,7 +805,16 @@ class VisionPerceptionNode(Node):
                 depth_frames_received=self._depth_frames_received,
                 camera_info_received=self._camera_info_received,
                 observations_dropped_age=self._observations_dropped_age,
+                observations_dropped_age_post_infer=(
+                    self._observations_dropped_age_post_infer
+                ),
                 max_observation_age_sec=self._max_observation_age_sec,
+                input_profile=self._input_profile,
+                image_qos_reliability=self._image_qos_reliability,
+                allow_bbox_mask_fallback=self._allow_bbox_mask_fallback,
+                last_mask_source=self._last_mask_source,
+                last_mask_degraded_count=self._last_mask_degraded_count,
+                last_registration_reason=self._last_registration_reason,
             )
             status.level = as_diagnostic_level_byte(level)
             status.message = msg

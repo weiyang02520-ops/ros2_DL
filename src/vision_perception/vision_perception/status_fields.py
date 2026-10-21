@@ -102,7 +102,14 @@ def compose_v1_ros_diagnostic(
     depth_frames_received: int = 0,
     camera_info_received: bool = False,
     observations_dropped_age: int = 0,
+    observations_dropped_age_post_infer: int = 0,
     max_observation_age_sec: float = 0.500,
+    input_profile: str = "default",
+    image_qos_reliability: str = "best_effort",
+    allow_bbox_mask_fallback: bool = True,
+    last_mask_source: str = "",
+    last_mask_degraded_count: int = 0,
+    last_registration_reason: str = "",
 ) -> Tuple[bytes, str, Dict[str, str]]:
     """Return (level_byte, message, key/value fields) for v1_ros(+optional V2/V3) status."""
     error = (last_worker_error or "").strip()
@@ -169,6 +176,9 @@ def compose_v1_ros_diagnostic(
         "input_stale_sec": f"{float(input_stale_sec):.3f}",
         "max_observation_age_sec": f"{float(max_observation_age_sec):.3f}",
         "observations_dropped_age": str(int(observations_dropped_age)),
+        "observations_dropped_age_post_infer": str(
+            int(observations_dropped_age_post_infer)
+        ),
         "last_inference_ms": (
             f"{float(last_inference_ms):.2f}" if last_inference_ms >= 0 else ""
         ),
@@ -177,6 +187,14 @@ def compose_v1_ros_diagnostic(
         "rgb_topic": rgb_topic,
         "depth_topic": depth_topic,
         "camera_info_topic": camera_info_topic,
+        "input_profile": str(input_profile or "default"),
+        "image_qos_reliability": str(image_qos_reliability or "best_effort"),
+        "allow_bbox_mask_fallback": (
+            "true" if allow_bbox_mask_fallback else "false"
+        ),
+        "last_mask_source": str(last_mask_source or ""),
+        "last_mask_degraded_count": str(int(last_mask_degraded_count)),
+        "last_registration_reason": str(last_registration_reason or ""),
     }
     return as_diagnostic_level_byte(level), message, fields
 

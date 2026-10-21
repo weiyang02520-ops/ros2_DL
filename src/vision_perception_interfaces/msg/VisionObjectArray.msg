@@ -9,7 +9,9 @@ string source_session_id
 uint64 observation_id
 # Required non-empty for V2/V3 (CameraInfo hash). Empty only if input invalid.
 string calibration_id
-# LIVE_CAMERA / RECORDED_CAMERA for ROS observations.
+# LIVE_CAMERA / RECORDED_CAMERA for real/recorded ROS observations.
+# SYNTHETIC_DEV for fake/dev streams (must not be labeled LIVE_CAMERA).
+# OFFLINE_FILE for offline CLI.
 string source_kind
 # Empty before V3. Restart/reset creates a new ID namespace.
 string tracking_session_id

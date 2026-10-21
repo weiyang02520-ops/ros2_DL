@@ -1,0 +1,20 @@
+# Jetson / aarch64 隔离运行时依赖清单（W4）。
+# 不在生产 ~/ros2_DL 的系统 Python 里直接 pip 安装；使用隔离 venv 或用户目录。
+# 状态分层（必须分别记录，不能混写）：
+#   PREPARED  = 本文件与模型已在 PC/机上就绪
+#   BUILT     = 目标机 aarch64 上 onnxruntime 等已安装且 import 成功
+#   RUN       = 真实节点已在目标机跑过（本包云端未做 → NOT_RUN）
+#
+# 安装顺序（与 x86 相同，禁止 NumPy 2.x）：
+#   python3 -m pip install --user 'numpy>=1.26.4,<2'
+#   python3 -m pip install --user 'opencv-python-headless==4.10.0.84'
+#   # CPU 路径（首版）：
+#   python3 -m pip install --user 'onnxruntime==1.20.1'
+#   # 若官方 aarch64 wheel 不可用：改用厂商/Jetson 文档推荐的 ORT 构建，
+#   # 并在部署记录写明版本与来源；不得把旧 yolo26.engine 当 YOLO11n-seg。
+#
+# TensorRT / GPU EP 优化需单独授权，不在 W1–W4 默认范围。
+
+numpy>=1.26.4,<2
+opencv-python-headless==4.10.0.84
+onnxruntime==1.20.1

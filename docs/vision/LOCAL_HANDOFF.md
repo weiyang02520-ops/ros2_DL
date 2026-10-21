@@ -2,8 +2,8 @@
 
 > **读者：** 在**本地 PC** 新开 Cursor 对话、且能 SSH 到机器人 `nvidia@192.168.43.12` 的会话。  
 > **云端：** 曾连不上该局域网 IP（ping/ssh 超时）；实机备份与联调由本线接手。  
-> **分支：** `cursor/vision-v1-offline-1fcf`（[PR #1](https://github.com/weiyang02520-ops/dg202611_robot_integration/pull/1)，**勿合并**，直至用户明确要求）。  
-> **姊妹文档：** 根目录 `CLOUD_HANDOFF.md`（仓库发布与云端边界；内容偏早期，以本文 + `src/vision_perception/README.md` + `docs/dg202611/VISION_INTEGRATION_PLAN.md` 为准）。
+> **当前视觉开发分支（W1–W4）：** `codex/zed-bottle-w1-w4`（基于 `vision/v1-v3`，**勿合并** `main`，直至用户明确要求）。  
+> **姊妹文档：** `docs/vision/CLOUD_HANDOFF.md`；交付范围 `docs/vision/DELIVERY_SCOPE.md`；本包交接 `docs/vision/W1_W4_HANDOFF.md`；ARM64 `docs/vision/ARM64_DEPENDENCY_PLAN.md`；消息合同 `src/vision_perception_interfaces/INTERFACE_CONTRACT.md`。
 
 ---
 

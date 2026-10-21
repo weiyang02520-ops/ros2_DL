@@ -1,0 +1,64 @@
+# ZED 消费 profile（W3）：只订阅已有 ZED 话题，不启动 SDK/驱动，不发 TF/运动。
+# 使用方式（预览后由本机授权执行）：
+#   ros2 launch vision_perception vision_zed_subscribe.launch.py \
+#     mode:=v1_ros enable_objects:=true \
+#     model_path:=/ABS/yolo11n-seg.onnx model_manifest_path:=/ABS/model_manifest.json
+#
+# 实机验收仍为 NOT_RUN，直至窗口 A/B 实测。
+# 透明瓶杯：二维可记，三维有效性单独按路线 B，不得默认 position_valid=true。
+
+vision_perception_node:
+  ros__parameters:
+    mode: v1_ros
+    detector_enabled: true
+    backend: onnxruntime_cpu
+    publish_debug_image: false
+    enable_objects: false          # 显式打开：enable_objects:=true
+    enable_tracking: false         # 首版默认关闭
+    tracking_enabled: false
+
+    input_profile: zed_subscribe
+    source_kind: ""                # 自动 LIVE_CAMERA（非假流）
+    image_qos_reliability: best_effort
+    camera_contract: "ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK"
+
+    # 与 vision_fix Step 03 / 机上常见 rect 话题一致；实机不一致时停机改 profile。
+    rgb_topic: /zed/zed_node/rgb/color/rect/image
+    depth_topic: /zed/zed_node/depth/depth_registered
+    camera_info_topic: /zed/zed_node/rgb/color/rect/camera_info
+    detections_topic: /dg/vision/detections_2d
+    objects_topic: /dg/vision/objects
+    status_topic: /dg/vision/status
+    target_classes: [bottle, cup]
+    image_frame_id: zed_left_camera_optical_frame
+
+    # 合格三维：拒绝未验证的 bbox 退化采样；mask 问题标 MASK_DEGRADED。
+    allow_bbox_mask_fallback: false
+    require_rgb_depth_same_size: true
+    require_depth_calib_same_frame: true
+
+    output_frame_policy: input_optical_header
+    sync_tolerance_sec: 0.010
+    sync_wait_sec: 0.100
+    sync_queue_size: 10
+    max_observation_age_sec: 0.500
+    input_stale_sec: 1.0
+    min_depth_m: 0.5
+    max_depth_m: 1.5
+    mask_erode_kernel: 3
+    depth_patch_size: 7
+    min_patch_pixels: 25
+    min_valid_depth_fraction: 0.60
+    max_depth_mad_m: 0.020
+    max_depth_spread_m: 0.050
+    inference_rate_hz: 5.0
+    confidence_threshold: 0.35
+    nms_iou_threshold: 0.45
+    max_detections: 20
+    ort_threads: 2
+    model_input_size: 640
+    status_rate_hz: 1.0
+    pending_frames: 1
+    # model_path / model_manifest_path 必须由 launch 或命令行提供绝对路径。
+    model_path: ""
+    model_manifest_path: ""

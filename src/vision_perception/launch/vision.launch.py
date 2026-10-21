@@ -3,7 +3,9 @@
 Optional V2 offline smoke: use_fake_depth:=true + enable_objects:=true
 (default false). Optional V3: enable_tracking:=true (v1_ros only, default false).
 mode:=v1 remains unsupported (node rejects). ZED is not started.
-camera_contract for v1_ros is DEV_WEBCAM_ONLY / NOT_ZED.
+camera_contract for v1_ros is DEV_WEBCAM_ONLY / NOT_ZED (fake/dev) or use
+vision_zed_subscribe.launch.py for ZED_TOPIC_SUBSCRIBE_ONLY / NOT_START_SDK.
+Fake paths set source_kind=SYNTHETIC_DEV (never LIVE_CAMERA).
 """
 
 import os
@@ -17,14 +19,15 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
+def _truthy_launch_flag(context, name: str) -> bool:
+    value = LaunchConfiguration(name).perform(context)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _launch_setup(context, *args, **kwargs):
-    use_fake_depth = LaunchConfiguration("use_fake_depth").perform(context)
-    use_fake_depth_on = str(use_fake_depth).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    use_fake_depth_on = _truthy_launch_flag(context, "use_fake_depth")
+    use_fake_image_on = _truthy_launch_flag(context, "use_fake_image")
+    use_synthetic = use_fake_depth_on or use_fake_image_on
     depth_topic = LaunchConfiguration("depth_topic").perform(context)
     camera_info_topic = LaunchConfiguration("camera_info_topic").perform(context)
     if use_fake_depth_on:
@@ -88,30 +91,42 @@ def _launch_setup(context, *args, **kwargs):
             executable="vision_perception_node",
             name="vision_perception_node",
             output="screen",
-            parameters=[
-                LaunchConfiguration("params_file"),
-                {
-                    "mode": LaunchConfiguration("mode"),
-                    "rgb_topic": LaunchConfiguration("rgb_topic"),
-                    "depth_topic": depth_topic,
-                    "camera_info_topic": camera_info_topic,
-                    "model_path": LaunchConfiguration("model_path"),
-                    "model_manifest_path": LaunchConfiguration("model_manifest_path"),
-                    "camera_contract": LaunchConfiguration("camera_contract"),
-                    "publish_debug_image": ParameterValue(
-                        LaunchConfiguration("publish_debug_image"), value_type=bool
-                    ),
-                    "enable_objects": ParameterValue(
-                        LaunchConfiguration("enable_objects"), value_type=bool
-                    ),
-                    "enable_tracking": ParameterValue(
-                        LaunchConfiguration("enable_tracking"), value_type=bool
-                    ),
-                },
-            ],
+            parameters=_vision_node_parameters(
+                depth_topic=depth_topic,
+                camera_info_topic=camera_info_topic,
+                use_synthetic=use_synthetic,
+            ),
         ),
     ]
     return nodes
+
+
+def _vision_node_parameters(*, depth_topic: str, camera_info_topic: str, use_synthetic: bool):
+    """Build vision_perception_node parameter overlays for this launch."""
+    overlay = {
+        "mode": LaunchConfiguration("mode"),
+        "rgb_topic": LaunchConfiguration("rgb_topic"),
+        "depth_topic": depth_topic,
+        "camera_info_topic": camera_info_topic,
+        "model_path": LaunchConfiguration("model_path"),
+        "model_manifest_path": LaunchConfiguration("model_manifest_path"),
+        "camera_contract": LaunchConfiguration("camera_contract"),
+        "publish_debug_image": ParameterValue(
+            LaunchConfiguration("publish_debug_image"), value_type=bool
+        ),
+        "enable_objects": ParameterValue(
+            LaunchConfiguration("enable_objects"), value_type=bool
+        ),
+        "enable_tracking": ParameterValue(
+            LaunchConfiguration("enable_tracking"), value_type=bool
+        ),
+        # Fake launch path must never claim LIVE_CAMERA (W1).
+        "input_profile": "fake_dev" if use_synthetic else "default",
+        "source_kind": "SYNTHETIC_DEV" if use_synthetic else "",
+    }
+    if use_synthetic:
+        overlay["allow_bbox_mask_fallback"] = True
+    return [LaunchConfiguration("params_file"), overlay]
 
 
 def generate_launch_description():

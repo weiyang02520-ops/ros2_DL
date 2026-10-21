@@ -23,6 +23,7 @@ install(FILES
   package.xml
   README.md
   requirements-runtime.txt
+  requirements-arm64.txt
   .gitattributes
   DESTINATION share/${PROJECT_NAME}
 )

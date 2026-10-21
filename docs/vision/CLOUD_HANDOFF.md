@@ -1,6 +1,7 @@
 # Cloud Development Handoff
 
-> **本地实机 / SSH 接手：** 请先读根目录 [`LOCAL_HANDOFF.md`](./LOCAL_HANDOFF.md)（完整记忆：阶段现状、安全边界、机上整仓备份顺序、`res_ds`、开场提示语）。云端连不上机器人局域网时，由本地 Cursor 按该文档继续。
+> **本地实机 / SSH 接手：** 请先读 [`LOCAL_HANDOFF.md`](./LOCAL_HANDOFF.md)。云端连不上机器人局域网时，由本地 Cursor 按该文档继续。  
+> **W1–W4 软件准备：** 见 [`W1_W4_HANDOFF.md`](./W1_W4_HANDOFF.md)、[`DELIVERY_SCOPE.md`](./DELIVERY_SCOPE.md)。分支 `codex/zed-bottle-w1-w4`（基线 `vision/v1-v3`）。云端可做离线单测/假流冒烟；**实机一律 NOT_RUN**，假数据不得记 PASS。
 
 This private repository is a reviewed source snapshot for DG-202611, published on 2026-10-14 at the owner's request. It does not transfer the original repository's full Git history.
 
